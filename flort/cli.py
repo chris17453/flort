@@ -11,9 +11,11 @@ def clean_content(file_path):
         return '\n'.join(cleaned_lines)
 
 def generate_tree(directory):
-    """Generates a tree structure of the given directory."""
+    """Generates a tree structure of the given directory, ignoring .git folders."""
     tree_structure = ''
     for root, dirs, files in os.walk(directory):
+        if '.git' in dirs:
+            dirs.remove('.git')  # Ignore .git folder
         level = root.replace(directory, '').count(os.sep)
         indent = '|   ' * level + '|-- '
         tree_structure += f"{indent}{os.path.basename(root)}/\n"
@@ -21,6 +23,7 @@ def generate_tree(directory):
         for file in files:
             tree_structure += f"{sub_indent}{file}\n"
     return tree_structure
+
 
 def list_files(directory, compress=False, extensions=None):
     """Lists files in the given directory with optional compression."""
@@ -71,7 +74,7 @@ def main():
     parser.add_argument('--py', action='store_true', help='Include Python files.')
     parser.add_argument('--c', action='store_true', help='Include C files.')
     parser.add_argument('--cpp', action='store_true', help='Include C++ files.')    
-    parser.add_argument('--tree', default=True, action='store_true', help='Print the tree at the beginning.')    
+    parser.add_argument('--no-tree', action='store_true', help='Dont print the tree at the beginning.')    
     args = parser.parse_args()
     
     extensions = []
@@ -84,9 +87,11 @@ def main():
         extensions.append('.py')
     if args.c:
         extensions.append('.c')
+        extensions.append('.h')
     if args.cpp:
         extensions.append('.cpp')
-    if args.tree == True:
+        extensions.append('.h')
+    if args.no_tree != True:
         output.append(generate_tree(args.dir))
     
     output.append(list_files(args.dir, compress=args.compress, extensions=extensions))
