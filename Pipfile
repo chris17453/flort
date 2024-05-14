@@ -5,6 +5,8 @@ name = "pypi"
 
 [packages]
 argparse = "*"
+flort = "*"
+pytest = "*"
 
 [dev-packages]
 

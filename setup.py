@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='flort',
-    version='0.1.2',
+    version='0.1.6.1',
     packages=find_packages(),
     entry_points={
         'console_scripts': [
@@ -10,11 +10,12 @@ setup(
         ]
     },
     install_requires=[
-        # Add any dependencies here
+        'argparse',
+        # Add other dependencies here
     ],
     author='Chris Watkins',
     author_email='chris@watkinslabs.com',
-    description='A utilty to flatten your source code directory into a single file for LLM usage',
+    description='A utility to flatten your source code directory into a single file for LLM usage',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/chris17453/flort',
