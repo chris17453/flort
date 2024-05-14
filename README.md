@@ -67,7 +67,7 @@ pip install -r requirements.txt
 Run the tests to ensure everything is working correctly:
 
 ```bash
-pytest
+make tests
 ```
 
 ## Contributing
