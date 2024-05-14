@@ -1,51 +1,87 @@
-# flort
+# Flort
 
-flort is a command-line tool for generating a single file with the contents of your code directories.. for use in LLMs.
+**Flort** is a utility tool designed to flatten your source code directory into a single file, making it convenient for Large Language Model (LLM) usage. It supports various options to include/exclude files based on extensions, binary detection, and hidden file visibility.
+
+## Features
+
+- **Directory Flattening**: Combine files from multiple directories into a single output file.
+- **File Filtering**: Filter files by extensions, hidden status, and binary detection.
+- **Customizable Output**: Option to output to a file or standard output.
+- **Directory Tree Generation**: Generate a visual directory tree structure.
 
 ## Installation
 
-You can install flort via pip:
+You can install flort from PyPI:
 
-```
+```bash
 pip install flort
 ```
 
 ## Usage
 
-flort provides various options for listing and cleaning up files in a directory.
+The primary usage of flort is through the command line interface (CLI). Below are some common commands and options:
 
 ```bash
-flort <directory_path> [--compress] [--output <output_file>] [--php] [--js] [--py] [--c] [--cpp] [--no-tree]
+flort [DIRECTORY]... [--output OUTPUT] [--no-tree] [--all] [--hidden] [--EXTENSIONS]...
 ```
 
-### Options
+- **DIRECTORY**: One or more directories to process.
+- **--output**: Output file path. If not specified, the result is printed to the standard output.
+- **--no-tree**: Do not print the directory tree at the beginning.
+- **--all**: Include all files regardless of extensions.
+- **--hidden**: Include hidden files.
+- **--EXTENSIONS**: List of file extensions to include. Each extension should be prefixed with `--`.
 
-- `--compress`: Clean up files by removing unnecessary whitespace (optional).
-- `--output`: Specify the output file path (default: stdout).
-- `--php`, `--js`, `--py`, `--c`, `--cpp`: Include specific file types in the listing (optional).
-- `--no-tree`: Do not print the directory tree at the beginning of the output (optional).
+### Examples
 
-## Examples
+1. **Basic Usage**: Process files in `src/` and `lib/`, including only `.py` and `.txt` files.
+    ```bash
+    flort src lib --py --txt
+    ```
 
-List files in a directory and include PHP files:
+2. **Include All Files**: Process all files in `src/` and `lib/`, ignoring file extensions.
+    ```bash
+    flort src lib --all
+    ```
 
+3. **Include Hidden Files**: Process files in `src/`, including hidden files and only `.md` files.
+    ```bash
+    flort src --hidden --md
+    ```
+
+4. **Output to File**: Process files in `src/` and output to `output.txt`.
+    ```bash
+    flort src --output output.txt --py --txt
+    ```
+
+## Development
+
+To set up the development environment, clone the repository and install the dependencies:
+
+```bash
+git clone https://github.com/chris17453/flort.git
+cd flort
+pip install -r requirements.txt
 ```
-flort /path/to/directory --php
+
+Run the tests to ensure everything is working correctly:
+
+```bash
+pytest
 ```
 
-Clean up files in a directory and save the output to a file:
+## Contributing
 
-```
-flort /path/to/directory --compress --output output.txt
-```
-
-List files in a directory, include JavaScript and Python files, and do not print the directory tree:
-
-```
-flort /path/to/directory --js --py --no-tree
-```
+Contributions are welcome! Feel free to open issues or submit pull requests on the GitHub repository.
 
 ## License
 
-This project is licensed under the BSD 3-Clause License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the BSD License. See the [LICENSE](LICENSE) file for more details.
 
+## Author
+
+Chris Watkins - [chris@watkinslabs.com](mailto:chris@watkinslabs.com)
+
+## Acknowledgments
+
+Special thanks to the open-source community for their invaluable contributions and support.
