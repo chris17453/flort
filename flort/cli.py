@@ -139,7 +139,7 @@ def print_configuration(directories, extensions, include_all, include_hidden,ign
 def main():
     """Main function to parse arguments and execute operations."""
     output_file = f"{os.path.basename(os.getcwd())}.flort"
-    current_datetime = datetime.now().strftime('%Y%m%d_%H%M%S')
+    current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
   
     parser = argparse.ArgumentParser(description="flort: create a single file of all given extensions, ecursivly for all dirictories given. Ignores binary files.", prog='flort',add_help=False,prefix_chars='-',allow_abbrev=False)
@@ -168,7 +168,7 @@ def main():
         logging.error("No extensions provided and --all flag not set. No files to process.")
         return
 
-    output_content = ["Florted: {current_datetime}"]
+    output_content = [f"Florted: {current_datetime}"]
     if not args.no_tree:
         output_content.append(generate_tree(args.directories, extensions=extensions, include_all=args.all, include_hidden=args.hidden,ignore_dirs=ignore_dirs))
 

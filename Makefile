@@ -9,7 +9,7 @@ clean:
 build: clean
 	python setup.py sdist
 
-upload:
+upload: build
 	twine upload dist/*
 
 # Set up the test environment
