@@ -22,11 +22,12 @@ pip install flort
 The primary usage of flort is through the command line interface (CLI). Below are some common commands and options:
 
 ```bash
-flort [DIRECTORY]... [--output OUTPUT] [--no-tree] [--all] [--hidden] [--EXTENSIONS]...
+flort [DIRECTORY]... [--output OUTPUT] [--no-tree] [--all] [--hidden] [--ignore-dirs DIRS] [--EXTENSIONS]...
 ```
 
-- **DIRECTORY**: One or more directories to process.
+- **DIRECTORY**: One or more directories to process. Defaults to the current working directory if not specified.
 - **--output**: Output file path. If not specified, the result is printed to the standard output.
+- **--ignore-dirs**: Comma-separated list of directories to ignore.
 - **--no-tree**: Do not print the directory tree at the beginning.
 - **--all**: Include all files regardless of extensions.
 - **--hidden**: Include hidden files.
@@ -52,6 +53,11 @@ flort [DIRECTORY]... [--output OUTPUT] [--no-tree] [--all] [--hidden] [--EXTENSI
 4. **Output to File**: Process files in `src/` and output to `output.txt`.
     ```bash
     flort src --output output.txt --py --txt
+    ```
+
+5. **Ignore Specific Directories**: Process files in `src/`, ignoring `__pycache__` and `build` directories.
+    ```bash
+    flort src --ignore-dirs __pycache__,build --py --txt
     ```
 
 ## Development

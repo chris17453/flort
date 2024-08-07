@@ -1,9 +1,22 @@
-.PHONY: build test
+.PHONY: build tests clean setup
 
-build:
-	rm -f ./dist/*
+# Remove previous build artifacts
+clean:
+	rm -rf ./dist/*
+	rm -rf *.egg-info
+
+# Build the package and upload to PyPI
+build: clean
 	python setup.py sdist
+
+upload:
 	twine upload dist/*
 
-test:
-	pytest tests/test_cli.py	
+# Set up the test environment
+setup:
+	chmod +x tests/setup.sh
+	bash tests/setup.sh
+
+# Build the package and then run tests
+test: setup build
+	pytest tests/test_cli.py

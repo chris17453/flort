@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, mock_open
+from unittest.mock import patch, mock_open, ANY
 from pathlib import Path
 import os
 
@@ -7,7 +7,7 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from flort.cli import clean_content, generate_tree, list_files, is_binary_file
+from flort.cli import clean_content, generate_tree, list_files, is_binary_file,main
 
 def test_clean_content():
     test_data = "line 1\n\nline 2\n\n\nline 3\n"
@@ -108,6 +108,63 @@ def test_list_files(tmp_path):
         f"Path: {d2 / 'file3.txt'}\nFile: file3.txt\n-------\ncontent"
     )
     assert list_files([d1, d2], include_all=True, include_hidden=True) == expected_result_hidden
+
+    # Test with no extensions and no --all flag
+    expected_result_no_ext = ''
+    assert list_files([d1, d2], extensions=[]) == expected_result_no_ext
+
+def test_list_files(tmp_path):
+    d1 = tmp_path / "subdir1"
+    d1.mkdir()
+    (d1 / "file1.txt").write_text("content")
+    (d1 / "file2.py").write_text("content")
+    (d1 / "binary_file.bin").write_bytes(b'\x00\x01\x02')
+    
+    d2 = tmp_path / "subdir2"
+    d2.mkdir()
+    (d2 / "file3.txt").write_text("content")
+    (d2 / ".hidden.txt").write_text("hidden content")
+    
+    # Test without ignore_dirs
+    expected_result = (
+        f"Path: {d1 / 'file2.py'}\nFile: file2.py\n-------\ncontent\n"
+        f"Path: {d1 / 'file1.txt'}\nFile: file1.txt\n-------\ncontent\n"
+        f"Path: {d2 / 'file3.txt'}\nFile: file3.txt\n-------\ncontent"
+    )
+    assert list_files([d1, d2], extensions=['.txt', '.py']) == expected_result
+
+    # Test with --all flag
+    expected_result_all = (
+        f"Path: {d1 / 'file2.py'}\nFile: file2.py\n-------\ncontent\n"
+        f"Path: {d1 / 'file1.txt'}\nFile: file1.txt\n-------\ncontent\n"
+        f"Path: {d2 / 'file3.txt'}\nFile: file3.txt\n-------\ncontent"
+    )
+    assert list_files([d1, d2], include_all=True, include_hidden=False) == expected_result_all
+
+    # Test with --hidden flag
+    expected_result_hidden = (
+        f"Path: {d1 / 'file2.py'}\nFile: file2.py\n-------\ncontent\n"
+        f"Path: {d1 / 'file1.txt'}\nFile: file1.txt\n-------\ncontent\n"
+        f"Path: {d2 / '.hidden.txt'}\nFile: .hidden.txt\n-------\nhidden content\n"
+        f"Path: {d2 / 'file3.txt'}\nFile: file3.txt\n-------\ncontent"
+    )
+    assert list_files([d1, d2], include_all=True, include_hidden=True) == expected_result_hidden
+
+    # Test with ignore_dirs parameter
+    ignore_dirs = [str(d1)]  # Ignore the first directory
+    expected_result_ignore_d1 = (
+        f"Path: {d2 / 'file3.txt'}\nFile: file3.txt\n-------\ncontent"
+    )
+    assert list_files([d1, d2], extensions=['.txt', '.py'], ignore_dirs=ignore_dirs) == expected_result_ignore_d1
+
+    # Test with ignore_dirs parameter (ignoring a non-existent directory)
+    ignore_dirs_non_existent = [str(tmp_path / "nonexistent")]
+    expected_result_ignore_non_existent = (
+        f"Path: {d1 / 'file2.py'}\nFile: file2.py\n-------\ncontent\n"
+        f"Path: {d1 / 'file1.txt'}\nFile: file1.txt\n-------\ncontent\n"
+        f"Path: {d2 / 'file3.txt'}\nFile: file3.txt\n-------\ncontent"
+    )
+    assert list_files([d1, d2], extensions=['.txt', '.py'], ignore_dirs=ignore_dirs_non_existent) == expected_result_ignore_non_existent
 
     # Test with no extensions and no --all flag
     expected_result_no_ext = ''
