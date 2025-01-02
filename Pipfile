@@ -7,8 +7,8 @@ name = "pypi"
 argparse = "*"
 flort = "*"
 pytest = "*"
+setuptools = "*"
 
 [dev-packages]
 
 [requires]
-python_version = "3.11"

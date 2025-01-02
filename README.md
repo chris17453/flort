@@ -1,93 +1,178 @@
-# Flort
+# Flort: File Concatenation and Project Overview Tool 🗂️
 
-**Flort** is a utility tool designed to flatten your source code directory into a single file, making it convenient for Large Language Model (LLM) usage. It supports various options to include/exclude files based on extensions, binary detection, and hidden file visibility.
+Flort is a powerful command-line tool designed to help developers create consolidated views of their project's source code. It generates comprehensive project overviews by combining directory trees, Python module outlines, and source file concatenation into a single, easily shareable output file.
 
-## Features
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/downloads/)
 
-- **Directory Flattening**: Combine files from multiple directories into a single output file.
-- **File Filtering**: Filter files by extensions, hidden status, and binary detection.
-- **Customizable Output**: Option to output to a file or standard output.
-- **Directory Tree Generation**: Generate a visual directory tree structure.
+## Features ✨
 
-## Installation
+- **Directory Tree Generation**: Creates visual representation of project structure
+- **Source File Concatenation**: Combines multiple source files into a single output
+- **Python Module Outline**: Generates detailed outlines of Python modules including:
+  - Function signatures with type hints
+  - Class hierarchies
+  - Docstrings
+  - Decorators
+- **Flexible File Filtering**:
+  - Filter by file extensions
+  - Include/exclude hidden files
+  - Ignore specific directories
+- **Configurable Output**: Choose between file output or console display
 
-You can install flort from PyPI:
+## Installation 🚀
 
 ```bash
 pip install flort
 ```
 
-## Usage
+## Quick Start 🏃‍♂️
 
-The primary usage of flort is through the command line interface (CLI). Below are some common commands and options:
+Basic usage to analyze a Python project:
 
 ```bash
-flort [DIRECTORY]... [--output OUTPUT] [--no-tree] [--all] [--hidden] [--ignore-dirs DIRS] [--EXTENSIONS]...
+flort . --py --output=project_overview.txt
 ```
 
-- **DIRECTORY**: One or more directories to process. Defaults to the current working directory if not specified.
-- **--output**: Output file path. If not specified, the result is printed to the standard output.
-- **--ignore-dirs**: Comma-separated list of directories to ignore.
-- **--no-tree**: Do not print the directory tree at the beginning.
-- **--all**: Include all files regardless of extensions.
-- **--hidden**: Include hidden files.
-- **--EXTENSIONS**: List of file extensions to include. Each extension should be prefixed with `--`.
+This will:
+1. Scan the current directory for Python files
+2. Generate a directory tree
+3. Create a Python module outline
+4. Concatenate all Python source files
+5. Save everything to `project_overview.txt`
 
-### Examples
+## Usage Examples 📚
 
-1. **Basic Usage**: Process files in `src/` and `lib/`, including only `.py` and `.txt` files.
-    ```bash
-    flort src lib --py --txt
-    ```
+### Basic Directory Analysis
+```bash
+# Analyze current directory, include only Python files
+flort . --py
 
-2. **Include All Files**: Process all files in `src/` and `lib/`, ignoring file extensions.
-    ```bash
-    flort src lib --all
-    ```
+# Analyze multiple directories
+flort src tests --py
 
-3. **Include Hidden Files**: Process files in `src/`, including hidden files and only `.md` files.
-    ```bash
-    flort src --hidden --md
-    ```
+# Include multiple file types
+flort . --py --js --css
+```
 
-4. **Output to File**: Process files in `src/` and output to `output.txt`.
-    ```bash
-    flort src --output output.txt --py --txt
-    ```
+### Advanced Options
+```bash
+# Include hidden files
+flort . --py --hidden
 
-5. **Ignore Specific Directories**: Process files in `src/`, ignoring `__pycache__` and `build` directories.
-    ```bash
-    flort src --ignore-dirs __pycache__,build --py --txt
-    ```
+# Include all file types
+flort . --all
 
-## Development
+# Output to console instead of file
+flort . --py --output=stdio
 
-To set up the development environment, clone the repository and install the dependencies:
+# Skip directory tree generation
+flort . --py --no-tree
+
+# Generate only outline without source dump
+flort . --py --outline --no-dump
+
+# Ignore specific directories
+flort . --py --ignore-dirs=venv,build
+```
+
+## Command Line Options 🎮
+
+| Option | Description |
+|--------|-------------|
+| `DIRECTORY` | Directories to analyze (default: current directory) |
+| `--output` | Output file path (default: `{current_dir}.flort`) |
+| `--outline` | Generate Python module outline |
+| `--no-dump` | Skip source file concatenation |
+| `--no-tree` | Skip directory tree generation |
+| `--all` | Include all file types |
+| `--hidden` | Include hidden files |
+| `--ignore-dirs` | Comma-separated list of directories to ignore |
+| `--verbose` | Enable verbose logging |
+| `--help` | Show help message |
+
+## Output Format 📄
+
+The generated output file follows this structure:
+
+```
+## Florted: 2025-01-02 05:54:57
+
+## Directory Tree
+|-- project/
+|   |-- src/
+|   |   |-- main.py
+|   |-- tests/
+|       |-- test_main.py
+
+## Detailed Python Outline
+### File: src/main.py
+CLASS: MyClass
+  DOCSTRING:
+    Class description
+  FUNCTION: my_method(arg1: str, arg2: int = 0) -> bool
+    DOCSTRING:
+      Method description
+
+## File data
+--- File: src/main.py
+[source code here]
+```
+
+## Development 🛠️
+
+### Setup Development Environment
 
 ```bash
-git clone https://github.com/chris17453/flort.git
+# Clone the repository
+git clone https://github.com/yourusername/flort.git
 cd flort
-pip install -r requirements.txt
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate     # Windows
+
+# Install development dependencies
+pip install -e ".[dev]"
 ```
 
-Run the tests to ensure everything is working correctly:
+### Running Tests
 
 ```bash
-make tests
+# Run all tests
+python -m pytest
+
+# Run with coverage report
+python -m pytest --cov=flort tests/
 ```
 
-## Contributing
+## Contributing 🤝
 
-Contributions are welcome! Feel free to open issues or submit pull requests on the GitHub repository.
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
 
-## License
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-This project is licensed under the BSD License. See the [LICENSE](LICENSE) file for more details.
+### Code Style
 
-## Author
+- Follow PEP 8 guidelines
+- Add type hints to function signatures
+- Include docstrings for classes and functions
+- Write unit tests for new features
 
-Chris Watkins - [chris@watkinslabs.com](mailto:chris@watkinslabs.com)
+## License 📝
 
-## Acknowledgments
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-Special thanks to the open-source community for their invaluable contributions and support.
+## Acknowledgments 🙏
+
+- Thanks to all contributors who have helped shape Flort
+- Inspired by various code analysis and documentation tools in the Python ecosystem
+
+## Support 💬
+
+If you encounter any problems or have suggestions, please [open an issue](https://github.com/yourusername/flort/issues).

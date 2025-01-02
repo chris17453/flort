@@ -7,7 +7,7 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from flort.cli import clean_content, generate_tree, list_files, is_binary_file,main
+from flort.cli import clean_content, generate_tree, concat_files, is_binary_file,main
 
 def test_clean_content():
     test_data = "line 1\n\nline 2\n\n\nline 3\n"
@@ -89,7 +89,7 @@ def test_list_files(tmp_path):
         f"Path: {d1 / 'file1.txt'}\nFile: file1.txt\n-------\ncontent\n"
         f"Path: {d2 / 'file3.txt'}\nFile: file3.txt\n-------\ncontent"
     )
-    assert list_files([d1, d2], extensions=['.txt', '.py']) == expected_result
+    assert concat_files([d1, d2], extensions=['.txt', '.py']) == expected_result
 
     # Test with --all flag
     expected_result_all = (
@@ -97,7 +97,7 @@ def test_list_files(tmp_path):
         f"Path: {d1 / 'file1.txt'}\nFile: file1.txt\n-------\ncontent\n"
         f"Path: {d2 / 'file3.txt'}\nFile: file3.txt\n-------\ncontent"
     )
-    assert list_files([d1, d2], include_all=True, include_hidden=False) == expected_result_all
+    assert concat_files([d1, d2], include_all=True, include_hidden=False) == expected_result_all
 
     # Test with --hidden flag
     # Ensure the output includes .hidden.txt in the correct order
@@ -107,11 +107,11 @@ def test_list_files(tmp_path):
         f"Path: {d2 / '.hidden.txt'}\nFile: .hidden.txt\n-------\nhidden content\n"  # This line needs correct positioning
         f"Path: {d2 / 'file3.txt'}\nFile: file3.txt\n-------\ncontent"
     )
-    assert list_files([d1, d2], include_all=True, include_hidden=True) == expected_result_hidden
+    assert concat_files([d1, d2], include_all=True, include_hidden=True) == expected_result_hidden
 
     # Test with no extensions and no --all flag
     expected_result_no_ext = ''
-    assert list_files([d1, d2], extensions=[]) == expected_result_no_ext
+    assert concat_files([d1, d2], extensions=[]) == expected_result_no_ext
 
 def test_list_files(tmp_path):
     d1 = tmp_path / "subdir1"
@@ -131,7 +131,7 @@ def test_list_files(tmp_path):
         f"Path: {d1 / 'file1.txt'}\nFile: file1.txt\n-------\ncontent\n"
         f"Path: {d2 / 'file3.txt'}\nFile: file3.txt\n-------\ncontent"
     )
-    assert list_files([d1, d2], extensions=['.txt', '.py']) == expected_result
+    assert concat_files([d1, d2], extensions=['.txt', '.py']) == expected_result
 
     # Test with --all flag
     expected_result_all = (
@@ -139,7 +139,7 @@ def test_list_files(tmp_path):
         f"Path: {d1 / 'file1.txt'}\nFile: file1.txt\n-------\ncontent\n"
         f"Path: {d2 / 'file3.txt'}\nFile: file3.txt\n-------\ncontent"
     )
-    assert list_files([d1, d2], include_all=True, include_hidden=False) == expected_result_all
+    assert concat_files([d1, d2], include_all=True, include_hidden=False) == expected_result_all
 
     # Test with --hidden flag
     expected_result_hidden = (
@@ -148,14 +148,14 @@ def test_list_files(tmp_path):
         f"Path: {d2 / '.hidden.txt'}\nFile: .hidden.txt\n-------\nhidden content\n"
         f"Path: {d2 / 'file3.txt'}\nFile: file3.txt\n-------\ncontent"
     )
-    assert list_files([d1, d2], include_all=True, include_hidden=True) == expected_result_hidden
+    assert concat_files([d1, d2], include_all=True, include_hidden=True) == expected_result_hidden
 
     # Test with ignore_dirs parameter
     ignore_dirs = [str(d1)]  # Ignore the first directory
     expected_result_ignore_d1 = (
         f"Path: {d2 / 'file3.txt'}\nFile: file3.txt\n-------\ncontent"
     )
-    assert list_files([d1, d2], extensions=['.txt', '.py'], ignore_dirs=ignore_dirs) == expected_result_ignore_d1
+    assert concat_files([d1, d2], extensions=['.txt', '.py'], ignore_dirs=ignore_dirs) == expected_result_ignore_d1
 
     # Test with ignore_dirs parameter (ignoring a non-existent directory)
     ignore_dirs_non_existent = [str(tmp_path / "nonexistent")]
@@ -164,8 +164,8 @@ def test_list_files(tmp_path):
         f"Path: {d1 / 'file1.txt'}\nFile: file1.txt\n-------\ncontent\n"
         f"Path: {d2 / 'file3.txt'}\nFile: file3.txt\n-------\ncontent"
     )
-    assert list_files([d1, d2], extensions=['.txt', '.py'], ignore_dirs=ignore_dirs_non_existent) == expected_result_ignore_non_existent
+    assert concat_files([d1, d2], extensions=['.txt', '.py'], ignore_dirs=ignore_dirs_non_existent) == expected_result_ignore_non_existent
 
     # Test with no extensions and no --all flag
     expected_result_no_ext = ''
-    assert list_files([d1, d2], extensions=[]) == expected_result_no_ext
+    assert concat_files([d1, d2], extensions=[]) == expected_result_no_ext

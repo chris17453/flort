@@ -1,183 +1,141 @@
+#!/usr/bin/env python3
+"""
+Flort - File Concatenation and Project Overview Tool
+
+This module provides functionality to create a consolidated view of a project's
+source code by combining multiple files into a single output file. It can generate
+directory trees, create Python module outlines, and concatenate source files while
+respecting various filtering options.
+
+The tool is particularly useful for:
+- Creating project overviews
+- Generating documentation
+- Sharing code in a single file
+- Analyzing project structure
+
+Usage:
+    flort [DIRECTORY...] [--extension...] [options]
+
+Example:
+    flort . --py --js --output=project.txt --hidden
+"""
+
 import os
 import argparse
-from pathlib import Path
 import logging
 from datetime import datetime
+from pathlib import Path
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+from .utils import generate_tree, write_file,configure_logging,print_configuration
+from .traverse import get_paths
+from .concatinate_files import concat_files
+from .python_outline import python_outline_files
 
-def is_binary_file(file_path):
-    """Check if a file is binary."""
-    try:
-        with open(file_path, 'rb') as file:
-            chunk = file.read(1024)
-            if b'\x00' in chunk:
-                return True
-            text_characters = bytes(range(32, 127)) + b'\n\r\t\f\b'
-            if bool(chunk.translate(None, text_characters)):
-                return True
-        return False
-    except Exception as e:
-        logging.error(f"Error determining if file is binary {file_path}: {e}")
-        return True
 
-def clean_content(file_path):
-    """Cleans up the content of a file by removing unnecessary whitespace."""
-    with open(file_path, 'r') as file:
-        lines = file.readlines()
-        cleaned_lines = [line.strip() for line in lines if line.strip()]
-        return '\n'.join(cleaned_lines)
 
-def generate_tree(directories, extensions=None, include_all=False, include_hidden=False,ignore_dirs=None):
-    """Generates a tree structure for multiple directories."""
-    tree_structure = ''
-    for directory in directories:
-        directory_path = Path(directory).resolve()
+def main() -> None:
+    """
+    Main entry point for the Flort tool.
 
-        for root, dirs, files in os.walk(directory_path):
-            root_path = Path(root).resolve()
-            relative_root = root_path.relative_to(directory_path)
+    This function:
+    1. Sets up argument parsing with detailed help messages
+    2. Configures logging based on verbosity
+    3. Processes command line arguments
+    4. Generates the output file containing:
+        - Directory tree (optional)
+        - Python module outline (if requested)
+        - Concatenated source files (unless disabled)
 
-           # Check if the current directory should be ignored
-            if ignore_dirs and any(root_path.is_relative_to(ignore_dir) or str(relative_root).startswith(str(ignore_dir)) for ignore_dir in ignore_dirs):
-                # Skip this directory and its contents
-                dirs[:] = []  # Stop os.walk from descending into this directory
-                continue
+    Returns:
+        None
 
-            if not include_hidden:
-                dirs[:] = [d for d in dirs if not d.startswith('.')]
-                files = [f for f in files if not f.startswith('.')]
-            
-            if include_all:
-                included_files = files
-            elif extensions:
-                included_files = [f for f in files if Path(f).suffix in extensions]
-            else:
-                dirs[:] = []  # Skip all directories
-                included_files = []  # Skip all files
-
-            included_files = [f for f in included_files if not is_binary_file(os.path.join(root, f))]
-            if included_files or (dirs and include_all):
-                level = len(root_path.relative_to(directory_path).parts)
-                indent = '|   ' * level + '|-- '
-                sub_indent = '|   ' * (level + 1) + '|-- '
-                tree_structure += f"{indent}{root_path.name}/\n"
-                for file in included_files:
-                    tree_structure += f"{sub_indent}{file}\n"
-    return tree_structure
-
-def list_files(directories=None,  extensions=None, include_all=False, include_hidden=False,ignore_dirs=None):
-        """Lists files in multiple directories."""
-    #try:
-        files_info = []
-        num_files = 0
-        if None==directories:
-            return
-        total_files=0
-        for directory in directories:
-            directory_path = Path(directory)
-            if not directory_path.is_dir():
-                logging.error(f"The path {directory} is not a valid directory.")
-                continue
-
-            logging.info(f"Processing directory: {directory_path}")
-
-            for file_path in directory_path.rglob('*'):
-                absolute_path = file_path.resolve()
-
-                # Check if the file's directory or its parent directories should be ignored
-                if ignore_dirs and any(absolute_path.is_relative_to(ignore_dir) for ignore_dir in ignore_dirs):
-                    continue
-                total_files+=1
-
-                if file_path.is_file() and '.git' not in file_path.parts:
-                    if not include_hidden and file_path.name.startswith('.'):
-                        continue
-                    if is_binary_file(file_path):
-                        continue
-                    if include_all or (extensions and file_path.suffix.lower() in extensions):
-                        num_files += 1
-                        file_info = [f"Path: {file_path}", f"File: {file_path.name}", "-------"]
-
-                        try:
-                            with open(file_path, 'r') as f:
-                                file_info.append(f.read())
-                        except Exception as e:
-                            logging.error(f"Error reading file {file_path}: {e}")
-                        
-                        files_info.append('\n'.join(file_info))
-
-        logging.info(f"Files processed: {num_files} of {total_files}")
-        return '\n'.join(files_info)
-    #except Exception as e:
-    #    logging.error(f"Error processing directories: {e}")
-    #    return ""
-    
-def write_file(file_path, data):
-    """Writes data to the specified file."""
-    try:
-        with open(file_path, 'w') as file:
-            file.write(data)
-        logging.info(f"Output written to: {file_path}.")
-    except IOError as e:
-        logging.error(f"Failed to write to {file_path}: {e}")
-    except Exception as e:
-        logging.error(f"An unexpected error occurred while writing to {file_path}: {e}")
-
-def print_configuration(directories, extensions, include_all, include_hidden,ignore_dirs=None):
-    """Prints the directories and extensions being processed."""
-    logging.info(f"Processing:  {', '.join(directories)}")
-    logging.info(f"Types: {', '.join(extensions)}")
-    logging.info(f"All files: {include_all}")
-    logging.info(f"Hidden files: {include_hidden}")
-    if ignore_dirs:
-
-        for dir in ignore_dirs:
-            logging.info(f"Omitting: {dir}")
-
-def main():
-    """Main function to parse arguments and execute operations."""
+    Raises:
+        SystemExit: If required arguments are missing or invalid
+    """
     output_file = f"{os.path.basename(os.getcwd())}.flort"
     current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-  
-    parser = argparse.ArgumentParser(description="flort: create a single file of all given extensions, ecursivly for all dirictories given. Ignores binary files.", prog='flort',add_help=False,prefix_chars='-',allow_abbrev=False)
-    parser.add_argument('directories', metavar='DIRECTORY',default=".", type=str, nargs='*', help='Directories to list files from, defaults to the curent working directory.')
-    parser.add_argument('--ignore-dirs', type=str, help='Directories to ignore (comma-separated list).')
-    parser.add_argument('-h', '--help', action='help', help='show this help message and exit')
-    parser.add_argument('--output', type=str, default=output_file, help='Output file path. Defaults to the basename of the current directory if not specified. stdio will ouput to console')
-    parser.add_argument('--no-tree', action='store_true', help='Do not print the tree at the beginning.')
-    parser.add_argument('--all', action='store_true', help='Include all files regardless of extensions.')
-    parser.add_argument('--hidden', action='store_true', help='Include hidden files.')
+    # Create argument parser with comprehensive help
+    parser = argparse.ArgumentParser(
+        description="flort: create a single file of all given extensions, "
+                   "recursively for all directories given. Ignores binary files.",
+        prog='flort',
+        add_help=False,
+        prefix_chars='-',
+        allow_abbrev=False
+    )
+
+    # Define command-line arguments with detailed help messages
+    parser.add_argument('directories',   metavar='DIRECTORY',  help='Directories to list files from, defaults to the current working directory.',default=".",type=str,nargs='*')
+    parser.add_argument('-h', '--help',  action='help',        help='Show this help message and exit.')
+    parser.add_argument('--ignore-dirs', type=str,             help='Directories to ignore (comma-separated list).')
+    parser.add_argument('--output',      type=str,             help='Output file path. Defaults to the basename of the current directory '             'if not specified. "stdio" will output to console.' ,default=output_file)
+    parser.add_argument('--outline',     action='store_true',  help='Create an outline of the files instead of a source dump.')
+    parser.add_argument('--no-dump',     action='store_true',  help='Do not dump the source files')
+    parser.add_argument('--no-tree',     action='store_true',  help='Do not print the tree at the beginning.')
+    parser.add_argument('--all',         action='store_true',  help='Include all files regardless of extensions.')
+    parser.add_argument('--hidden',      action='store_true',  help='Include hidden files.')
+    parser.add_argument('--verbose',     action='store_true',  help='Enable verbose logging (INFO level).')
+
+
+    # Parse known args, allowing unknown args for extensions
     args, unknown_args = parser.parse_known_args()
 
-    # Handle ignore_dirs argument
+    # Configure logging based on verbosity flag
+    configure_logging(args.verbose)
+
+    # Process ignore_dirs argument
     if args.ignore_dirs:
-        ignore_dirs = [Path(ignore_dir).resolve() for ignore_dir in args.ignore_dirs.split(',')]
+        ignore_dirs = [Path(ignore_dir).resolve() 
+                      for ignore_dir in args.ignore_dirs.split(',')]
     else:
         ignore_dirs = []
 
-    # Treat unknown args as extensions that start with '--'
-    extensions = [f".{ext.lstrip('-')}" for ext in unknown_args if ext.startswith('--')]
+    # Process extensions from unknown arguments
+    extensions = [f".{ext.lstrip('-')}" for ext in unknown_args 
+                 if ext.startswith('--')]
 
-    # Print configuration
-    print_configuration(args.directories, extensions, args.all, args.hidden,ignore_dirs)
+    # Log configuration settings
+    print_configuration(
+        args.directories,
+        extensions,
+        args.all,
+        args.hidden,
+        ignore_dirs
+    )
 
+    # Validate extensions or --all flag
     if not extensions and not args.all:
-        logging.error("No extensions provided and --all flag not set. No files to process.")
+        logging.error("No extensions provided and --all flag not set. "
+                     "No files to process.")
         return
 
-    output_content = [f"Florted: {current_datetime}"]
+    # Initialize output file with timestamp
+    write_file(args.output, f"## Florted: {current_datetime}\n", 'w')
+
+    # Get list of files to process
+    path_list = get_paths(
+        args.directories,
+        extensions=extensions,
+        include_all=args.all,
+        include_hidden=args.hidden,
+        ignore_dirs=ignore_dirs
+    )
+
+    print(f"Output to {args.output}\n")
+
+    # Generate directory tree if not disabled
     if not args.no_tree:
-        output_content.append(generate_tree(args.directories, extensions=extensions, include_all=args.all, include_hidden=args.hidden,ignore_dirs=ignore_dirs))
+        generate_tree(path_list, args.output)
 
-    output_content.append(list_files(args.directories, extensions=extensions, include_all=args.all, include_hidden=args.hidden,ignore_dirs=ignore_dirs))
+    # Generate Python outline if requested
+    if args.outline:
+        python_outline_files(path_list, args.output)
+    
+    # Concatenate source files if not disabled
+    if not args.no_dump:
+        concat_files(path_list, args.output)
 
-    if args.output != "stdio":
-        write_file(args.output, "\n".join(output_content))
-    else:
-        print("\n".join(output_content))
 
 if __name__ == "__main__":
     main()
