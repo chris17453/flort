@@ -6,7 +6,7 @@ Flort is a powerful command-line tool designed to help developers create consoli
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/downloads/)
 
 
-<video controls src="https://github.com/chris17453/flort/raw/refs/heads/main/assets/final_video.mp4" title="Video"><video>
+<video src="https://github.com/chris17453/flort/raw/refs/heads/main/assets/final_video.mp4" title="Video"><video>
 
 ## Features ✨
 
