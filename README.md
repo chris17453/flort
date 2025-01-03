@@ -5,6 +5,9 @@ Flort is a powerful command-line tool designed to help developers create consoli
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/downloads/)
 
+[![Python Version](assets/final_video.mp4)
+
+
 ## Features ✨
 
 - **Directory Tree Generation**: Creates visual representation of project structure
@@ -125,7 +128,13 @@ CLASS: MyClass
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/flort.git
+
+## Development
+
+To set up the development environment, clone the repository and install the dependencies:
+
+```bash
+git clone https://github.com/chris17453/flort.git
 cd flort
 
 # Create virtual environment
@@ -166,13 +175,16 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 
 ## License 📝
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the BSD 3 License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments 🙏
 
 - Thanks to all contributors who have helped shape Flort
 - Inspired by various code analysis and documentation tools in the Python ecosystem
 
+
 ## Support 💬
 
-If you encounter any problems or have suggestions, please [open an issue](https://github.com/yourusername/flort/issues).
+If you encounter any problems or have suggestions, please [open an issue](https://github.com/chris17453/flort/issues).
+
+
