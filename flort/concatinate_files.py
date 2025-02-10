@@ -3,7 +3,7 @@ from pathlib import Path
 import logging
 from datetime import datetime
 
-from .utils import write_file
+from .utils import write_file,count_tokens
 
 
 
@@ -26,7 +26,15 @@ def concat_files(file_list,output):
         if file_path.is_file():  # Then process files
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
-                    write_file(output,f"--- File: {item['relative_path']}\n{f.read()}\n")
+                    text=f.read()
+                    length=len(text)
+                    tokens= count_tokens(text)
+                    write_file(output,f"--- File: {item['relative_path']}\n")
+                    write_file(output,f"--- Characters : {length}\n")
+                    write_file(output,f"--- Token Count: {tokens}\n")
+                    write_file(output,text)
+                    write_file(output,"\n")
+                    
                     
             except Exception as e:
                 logging.error(f"Error reading file {file_path}: {e}")

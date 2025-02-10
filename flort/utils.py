@@ -12,6 +12,7 @@ while handling errors gracefully and providing appropriate logging.
 """
 
 import os
+import re
 import argparse
 from pathlib import Path
 import logging
@@ -169,7 +170,7 @@ def generate_tree(path_list: list, output: str) -> None:
         elif item['type'] == 'file':
             structure.append(f"{indent}{path.name}")
     
-    write_file(output, '\n'.join(structure))
+    write_file(output, '\n'.join(structure)+"\n\n\n")
 
 
 def configure_logging(verbose: bool) -> None:
@@ -189,6 +190,30 @@ def configure_logging(verbose: bool) -> None:
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
 
+def count_tokens(text):
+   
+   def split_words(word):
+       if len(word) <= 4:
+           return [word]
+       return [word[i:i+4] for i in range(0, len(word), 4)]
+
+   pattern = r'[A-Za-z]+(?:\'[A-Za-z]+)?|[0-9]+(?:\.[0-9]+)?%?|[.,!?;:]|[@#$&*]+'
+   base_tokens = re.findall(pattern, text)
+   
+   tokens = []
+   for token in base_tokens:
+       tokens.extend(split_words(token))
+       
+   return len(tokens)
+
+def count_file_tokens(filename):
+   with open(filename, 'r') as f:
+       text = f.read()
+   
+   token_count = count_tokens(text)
+   char_count = len(text)
+   
+   return f"Tokens: {token_count:,}\nCharacters: {char_count:,}"
 
 def print_configuration(
     directories: list,

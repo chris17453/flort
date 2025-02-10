@@ -5,11 +5,9 @@ Flort is a powerful command-line tool designed to help developers create consoli
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/downloads/)
 
-
-<video src="https://github.com/chris17453/flort/raw/refs/heads/main/assets/final_video.mp4" title="Video"><video>
-
 ## Features ✨
 
+- **Interactive File Selection UI**: Optional terminal-based interface for intuitive file and directory selection
 - **Directory Tree Generation**: Creates visual representation of project structure
 - **Source File Concatenation**: Combines multiple source files into a single output
 - **Python Module Outline**: Generates detailed outlines of Python modules including:
@@ -21,6 +19,7 @@ Flort is a powerful command-line tool designed to help developers create consoli
   - Filter by file extensions
   - Include/exclude hidden files
   - Ignore specific directories
+  - Include specific files
 - **Configurable Output**: Choose between file output or console display
 
 ## Installation 🚀
@@ -31,58 +30,80 @@ pip install flort
 
 ## Quick Start 🏃‍♂️
 
-Basic usage to analyze a Python project:
-
+Using command line:
 ```bash
-flort . --py --output=project_overview.txt
-```
+# Basic usage with Python files
+flort . --py
 
-This will:
-1. Scan the current directory for Python files
-2. Generate a directory tree
-3. Create a Python module outline
-4. Concatenate all Python source files
-5. Save everything to `project_overview.txt`
+# Using interactive UI
+flort --ui --py
+```
 
 ## Usage Examples 📚
 
-### Basic Directory Analysis
+### Standard Command Line Usage
 ```bash
-# Analyze current directory, include only Python files
+# Basic directory analysis with Python files
 flort . --py
 
-# Analyze multiple directories
-flort src tests --py
+# Multiple directories and file types
+flort src tests --py --js --css
 
-# Include multiple file types
-flort . --py --js --css
-```
+# Include specific files and ignore directories
+flort . --py --include-files=setup.py,README.md --ignore-dirs=venv,build
 
-### Advanced Options
-```bash
-# Include hidden files
-flort . --py --hidden
+# Output to console with hidden files
+flort . --all --hidden --output=stdio
 
-# Include all file types
-flort . --all
-
-# Output to console instead of file
-flort . --py --output=stdio
-
-# Skip directory tree generation
-flort . --py --no-tree
-
-# Generate only outline without source dump
+# Python outline only, no source dump
 flort . --py --outline --no-dump
 
-# Ignore specific directories
-flort . --py --ignore-dirs=venv,build
+# Complex configuration
+flort src tests \
+    --py --js \
+    --ignore-dirs=venv,build \
+    --include-files=setup.py \
+    --hidden \
+    --output=project.txt
+```
+
+### Interactive UI Usage (Optional)
+The `--ui` flag enables an interactive terminal interface for file selection:
+
+```bash
+# Basic UI launch
+flort --ui
+
+# UI with preselected Python files
+flort --ui --py
+
+# UI with included files and no output file
+flort --ui --include-files=setup.py,requirements.txt --output=stdio
+
+# UI with multiple extensions and specific directories
+flort --ui --py --js --css src tests
+
+# UI with all extensions and hidden files
+flort --ui --all --hidden
+
+# UI with outline only, no source dump
+flort --ui --outline --no-dump --py
+
+# UI with full configuration
+flort --ui \
+    --py --js \
+    --ignore-dirs=venv,build \
+    --include-files=setup.py \
+    --hidden \
+    --output=project.txt \
+    src tests
 ```
 
 ## Command Line Options 🎮
 
 | Option | Description |
 |--------|-------------|
+| `--ui` | Launch interactive file selector interface |
 | `DIRECTORY` | Directories to analyze (default: current directory) |
 | `--output` | Output file path (default: `{current_dir}.flort`) |
 | `--outline` | Generate Python module outline |
@@ -91,8 +112,22 @@ flort . --py --ignore-dirs=venv,build
 | `--all` | Include all file types |
 | `--hidden` | Include hidden files |
 | `--ignore-dirs` | Comma-separated list of directories to ignore |
+| `--include-files` | Comma-separated list of files to include |
 | `--verbose` | Enable verbose logging |
 | `--help` | Show help message |
+
+## Interactive UI Controls 🎮
+
+| Key | Action |
+|-----|--------|
+| ↑/↓ | Navigate files/directories |
+| ←/→ | Navigate directory tree |
+| SPACE | Toggle selection |
+| i | Toggle ignore |
+| f | Edit file type filters |
+| v | View selected/ignored items |
+| q | Save and exit |
+| ESC | Exit without saving |
 
 ## Output Format 📄
 
@@ -128,12 +163,6 @@ CLASS: MyClass
 
 ```bash
 # Clone the repository
-
-## Development
-
-To set up the development environment, clone the repository and install the dependencies:
-
-```bash
 git clone https://github.com/chris17453/flort.git
 cd flort
 
@@ -182,9 +211,6 @@ This project is licensed under the BSD 3 License - see the [LICENSE](LICENSE) fi
 - Thanks to all contributors who have helped shape Flort
 - Inspired by various code analysis and documentation tools in the Python ecosystem
 
-
 ## Support 💬
 
 If you encounter any problems or have suggestions, please [open an issue](https://github.com/chris17453/flort/issues).
-
-
