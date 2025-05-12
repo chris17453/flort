@@ -1,7 +1,7 @@
 # Flort: File Concatenation and Project Overview Tool
 
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
-[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/downloads/)
+[![Python Version](https://img.shields.io/badge/python-3.6%2B-blue)](https://www.python.org/downloads/)
 [![PyPI](https://img.shields.io/pypi/v/flort.svg)](https://pypi.org/project/flort/)
 
 Flort is a powerful command-line tool that helps developers generate consolidated views of their project source code. It combines directory trees, Python module outlines, and source file concatenation into a single, shareable output.
