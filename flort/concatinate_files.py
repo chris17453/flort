@@ -21,8 +21,6 @@ def concat_files(file_list,output):
     dir_results = []
     file_results = []
     write_file(output,f"## File data\n")
-    for item in file_list:
-        print(item)
 
     for item in file_list:
         file_path = item["path"]
