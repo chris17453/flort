@@ -26,8 +26,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from .utils import generate_tree, write_file, configure_logging, print_configuration, count_file_tokens
-from .traverse import get_paths
+from .utils import generate_tree, write_file, configure_logging, print_configuration, count_file_tokens, archive_file
+from .traverse import get_paths, get_files_from_glob_patterns
 from .concatinate_files import concat_files
 from .python_outline import python_outline_files
 from .curses_selector import select_files
@@ -52,7 +52,7 @@ def main() -> None:
     Raises:
         SystemExit: If required arguments are missing or invalid
     """
-    output_file = f"{os.path.basename(os.getcwd())}.flort"
+    output_file = f"{os.path.basename(os.getcwd())}.flort.txt"
     current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     # Create argument parser with comprehensive help
@@ -65,36 +65,40 @@ def main() -> None:
         allow_abbrev=False
     )
 
-    # Define command-line arguments with detailed help messages
-    parser.add_argument('directories', metavar='DIRECTORY',
+    parser.add_argument('directories', metavar='directories',
                         help='Directories to list files from, defaults to the current working directory.',
                         default=".", type=str, nargs='*')
     parser.add_argument('-h', '--help', action='help',
                         help='Show this help message and exit.')
-    parser.add_argument('--ignore-dirs', type=str,
+    parser.add_argument('-i', '--ignore-dirs', type=str,
                         help='Directories to ignore (comma-separated list).')
-    parser.add_argument('--output', type=str,
+    parser.add_argument('-o', '--output', type=str,
                         help='Output file path. Defaults to the basename of the current directory '
-                             'if not specified. "stdio" will output to console.', default=output_file)
-    parser.add_argument('--outline', action='store_true',
+                            'if not specified. "stdio" will output to console.', default=output_file)
+    parser.add_argument('-O', '--outline', action='store_true',
                         help='Create an outline of the files instead of a source dump.')
-    parser.add_argument('--no-dump', action='store_true',
+    parser.add_argument('-n', '--no-dump', action='store_true',
                         help='Do not dump the source files')
-    parser.add_argument('--no-tree', action='store_true',
+    parser.add_argument('-t', '--no-tree', action='store_true',
                         help='Do not print the tree at the beginning.')
-    parser.add_argument('--all', action='store_true',
+    parser.add_argument('-a', '--all', action='store_true',
                         help='Include all files regardless of extensions.')
-    parser.add_argument('--hidden', action='store_true',
+    parser.add_argument('-H', '--hidden', action='store_true',
                         help='Include hidden files.')
-    parser.add_argument('--verbose', action='store_true',
+    parser.add_argument('-v', '--verbose', action='store_true',
                         help='Enable verbose logging (INFO level).')
-    parser.add_argument('--include-files', type=str,
+    parser.add_argument('-f', '--include-files', type=str,
                         help='Comma-separated list of files to include regardless of search filter.')
-    parser.add_argument('--ui', action='store_true',
-                       help='Launch interactive file selector UI')
+    parser.add_argument('-u', '--ui', action='store_true',
+                    help='Launch interactive file selector UI')
+    parser.add_argument('-g', '--glob', type=str,
+                        help='Glob patterns to match files recursively (comma-separated list).',
+                        metavar='GLOB')
+    parser.add_argument('-z', '--archive', type=str, choices=['zip', 'tar.gz'],
+                        help='Archive the output file using the specified format.')    
+    parser.add_argument('-e', '--extensions', type=str,
+                    help='File extensions to include (comma-separated, without dots: py,js,txt)')
 
-    
-    # Parse known args, allowing unknown args for extensions
     args, unknown_args = parser.parse_known_args()
 
     # Configure logging based on verbosity flag
@@ -106,10 +110,13 @@ def main() -> None:
     else:
         ignore_dirs = []
 
-    # Process extensions from unknown arguments
-    extensions = [f".{ext.lstrip('-')}" for ext in unknown_args if ext.startswith('--')]
+    
 
-
+    # Then in the code, instead of parsing unknown args:
+    extensions = []
+    if args.extensions:
+        extensions = [f".{ext.strip()}" for ext in args.extensions.split(',')]
+    
     if args.ui:
         included_files = args.include_files.split(',') if args.include_files else None
         included_dirs = args.directories if args.directories and args.directories[0] != "." else None
@@ -148,8 +155,8 @@ def main() -> None:
     )
 
     # Validate extensions or --all flag
-    if not extensions and not args.all:
-        logging.error("No extensions provided and --all flag not set. No files to process.")
+    if not extensions and not args.all and not args.glob:
+        logging.error("No extensions or glob provided and --all flag not set. No files to process.")
         return
 
     # Initialize output file with timestamp
@@ -164,6 +171,57 @@ def main() -> None:
         ignore_dirs=ignore_dirs
     )
 
+    # Process glob patterns if provided
+    if args.glob:
+        print(path_list)
+        glob_patterns = [pattern.strip() for pattern in args.glob.split(',')]
+        print(f"Searching for glob patterns: {glob_patterns} in directories: {args.directories}")
+        
+        # Create a list of directories to search
+        search_dirs = [Path(d).resolve() for d in args.directories]
+        
+        # Process each glob pattern
+        for pattern in glob_patterns:
+            # Search in each directory
+            for base_dir in search_dirs:
+                print(f"Searching for {pattern} in {base_dir}")
+                
+                # Skip if not a directory
+                if not base_dir.is_dir():
+                    print(f"Skipping {base_dir} - not a directory")
+                    continue
+                    
+                # Find files matching the pattern
+                for file_path in base_dir.glob('**/' + pattern):
+                    if not file_path.is_file():
+                        continue
+                        
+                    # Check if in ignored directory
+                    should_ignore = False
+                    for ignore_dir in ignore_dirs:
+                        try:
+                            file_path.relative_to(ignore_dir)
+                            should_ignore = True
+                            break
+                        except ValueError:
+                            pass
+                    
+                    if not should_ignore:
+                        print(f"Found: {file_path}")
+                        try:
+                            rel_path = str(file_path.relative_to(Path.cwd()))
+                        except ValueError:
+                            rel_path = str(file_path)
+                            
+                        # Check if not already in path_list
+                        if not any(str(item.get("path")) == str(file_path) for item in path_list):
+                            path_list.append({
+                                "path": file_path,
+                                "relative_path": rel_path,
+                                "depth": len(file_path.parts) - len(Path.cwd().parts),
+                                "type": "file"
+                            })
+                            
     # Add included files from --include-files option
     if args.include_files:
         for file_str in args.include_files.split(','):
@@ -194,6 +252,15 @@ def main() -> None:
     # Concatenate source files if not disabled
     if not args.no_dump:
         concat_files(path_list, args.output)
+
+    print(count_file_tokens(args.output))
+
+    # Archive the output file if requested
+    if args.archive:
+        archive_path = archive_file(args.output, args.archive)
+        print(f"Archive created: {archive_path}")
+
+    print("")
 
     print(count_file_tokens(args.output))
     print("")

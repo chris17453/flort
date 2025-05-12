@@ -33,10 +33,10 @@ pip install flort
 Using command line:
 ```bash
 # Basic usage with Python files
-flort . --py
+flort -e py
 
 # Using interactive UI
-flort --ui --py
+flort -u -e py
 ```
 
 ## Usage Examples 📚
@@ -44,77 +44,97 @@ flort --ui --py
 ### Standard Command Line Usage
 ```bash
 # Basic directory analysis with Python files
-flort . --py
+flort -e py
 
 # Multiple directories and file types
-flort src tests --py --js --css
+flort -d src tests -e py,js,css
 
 # Include specific files and ignore directories
-flort . --py --include-files=setup.py,README.md --ignore-dirs=venv,build
+flort -e py -f setup.py,README.md -i venv,build
 
 # Output to console with hidden files
-flort . --all --hidden --output=stdio
+flort -a -H -o stdio
 
 # Python outline only, no source dump
-flort . --py --outline --no-dump
+flort -e py -O -n
 
 # Complex configuration
-flort src tests \
-    --py --js \
-    --ignore-dirs=venv,build \
-    --include-files=setup.py \
-    --hidden \
-    --output=project.txt
+flort -d src tests \
+    -e py,js \
+    -i venv,build \
+    -f setup.py \
+    -H \
+    -o project.txt
 ```
 
 ### Interactive UI Usage (Optional)
-The `--ui` flag enables an interactive terminal interface for file selection:
+The `-u` flag enables an interactive terminal interface for file selection:
 
 ```bash
 # Basic UI launch
-flort --ui
+flort -u
 
 # UI with preselected Python files
-flort --ui --py
+flort -u -e py
 
 # UI with included files and no output file
-flort --ui --include-files=setup.py,requirements.txt --output=stdio
+flort -u -f setup.py,requirements.txt -o stdio
 
 # UI with multiple extensions and specific directories
-flort --ui --py --js --css src tests
+flort -u -e py,js,css -d src tests
 
 # UI with all extensions and hidden files
-flort --ui --all --hidden
+flort -u -a -H
 
 # UI with outline only, no source dump
-flort --ui --outline --no-dump --py
+flort -u -O -n -e py
 
 # UI with full configuration
-flort --ui \
-    --py --js \
-    --ignore-dirs=venv,build \
-    --include-files=setup.py \
-    --hidden \
-    --output=project.txt \
-    src tests
+flort -u \
+    -e py,js \
+    -i venv,build \
+    -f setup.py \
+    -H \
+    -o project.txt \
+    -d src tests
+```
+
+### Using Glob Patterns
+You can use glob patterns to match files (make sure to quote patterns to prevent shell expansion):
+
+```bash
+# Match all Python files
+flort -g "*.py"
+
+# Match multiple patterns
+flort -g "*.py,*.js"
+
+# Combine with directories
+flort -d src -g "*.py"
+
+# Combine with other options
+flort -g "*.py" -i venv,build -H
 ```
 
 ## Command Line Options 🎮
 
-| Option | Description |
-|--------|-------------|
-| `--ui` | Launch interactive file selector interface |
-| `DIRECTORY` | Directories to analyze (default: current directory) |
-| `--output` | Output file path (default: `{current_dir}.flort`) |
-| `--outline` | Generate Python module outline |
-| `--no-dump` | Skip source file concatenation |
-| `--no-tree` | Skip directory tree generation |
-| `--all` | Include all file types |
-| `--hidden` | Include hidden files |
-| `--ignore-dirs` | Comma-separated list of directories to ignore |
-| `--include-files` | Comma-separated list of files to include |
-| `--verbose` | Enable verbose logging |
-| `--help` | Show help message |
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--dir DIRECTORY` | `-d` | Directories to analyze (default: current directory) |
+| `--extensions` | `-e` | File extensions to include (comma-separated, without dots: py,js,txt) |
+| `--output` | `-o` | Output file path (default: `{current_dir}.flort.txt`) |
+| `--outline` | `-O` | Generate Python module outline |
+| `--no-dump` | `-n` | Skip source file concatenation |
+| `--no-tree` | `-t` | Skip directory tree generation |
+| `--all` | `-a` | Include all file types |
+| `--hidden` | `-H` | Include hidden files |
+| `--ignore-dirs` | `-i` | Comma-separated list of directories to ignore |
+| `--include-files` | `-f` | Comma-separated list of files to include |
+| `--glob` | `-g` | Glob patterns to match files (comma-separated, quoted: "*.py,*.js") |
+| `--ui` | `-u` | Launch interactive file selector UI |
+| `--verbose` | `-v` | Enable verbose logging |
+| `--archive` | `-z` | Archive output file (zip, tar.gz) |
+| `--help` | `-h` | Show help message |
 
 ## Interactive UI Controls 🎮
 
@@ -197,7 +217,6 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 
 ### Code Style
 
-- Follow PEP 8 guidelines
 - Add type hints to function signatures
 - Include docstrings for classes and functions
 - Write unit tests for new features

@@ -97,3 +97,71 @@ def get_paths(
         scan_directory(base_path, 2)  # Start depth at 2 since base dir is depth 1
 
     return path_list
+
+
+def get_files_from_glob_patterns(directories, glob_patterns, ignore_dirs=None, re_glob=True):
+    """
+    Find files matching glob patterns within specified directories.
+    
+    Args:
+        directories (list): List of directory paths to search in
+        glob_patterns (list): List of glob patterns to match
+        ignore_dirs (list): List of directory paths to ignore
+        re_glob (bool): Whether to apply globbing (if False, assumes patterns are already file paths)
+        
+    Returns:
+        list: List of Path objects for files matching the patterns
+    """
+    if ignore_dirs is None:
+        ignore_dirs = []
+    
+    ignore_dirs = [Path(d).resolve() for d in ignore_dirs]
+    matching_files = []
+    
+    # For each specified directory
+    for directory in directories:
+        base_path = Path(directory).resolve()
+        print(f"Searching in: {base_path}")  # Debug output
+        
+        if not base_path.exists() or not base_path.is_dir():
+            print(f"Warning: Directory {base_path} does not exist or is not a directory")
+            continue
+            
+        # For each glob pattern
+        for pattern in glob_patterns:
+            print(f"Using pattern: {pattern}")  # Debug output
+            
+            # If re_glob is True, apply globbing
+            if re_glob:
+                file_paths = list(base_path.glob('**/' + pattern))
+                print(f"Found {len(file_paths)} matches for pattern {pattern}")  # Debug output
+            else:
+                # If re_glob is False, treat patterns as file paths
+                file_path = Path(pattern)
+                if file_path.is_absolute():
+                    file_paths = [file_path] if file_path.exists() else []
+                else:
+                    file_paths = [base_path / pattern] if (base_path / pattern).exists() else []
+            
+            for file_path in file_paths:
+                # Skip directories
+                if not file_path.is_file():
+                    continue
+                    
+                # Check if file is in an ignored directory
+                should_ignore = False
+                for ignore_dir in ignore_dirs:
+                    try:
+                        # Check if file_path is inside ignore_dir
+                        file_path.relative_to(ignore_dir)
+                        should_ignore = True
+                        print(f"Ignoring {file_path} (in ignored dir {ignore_dir})")  # Debug output
+                        break
+                    except ValueError:
+                        # Not in this ignored directory
+                        pass
+                
+                if not should_ignore:
+                    matching_files.append(file_path)
+    
+    return matching_files

@@ -15,8 +15,10 @@ import os
 import re
 import argparse
 from pathlib import Path
-import logging
 from datetime import datetime
+import zipfile
+import tarfile
+import logging
 
 
 def is_binary_file(file_path: Path) -> bool:
@@ -242,3 +244,30 @@ def print_configuration(
     if ignore_dirs:
         for dir in ignore_dirs:
             logging.info(f"Omitting: {dir}")
+
+
+def archive_file(file_path, archive_format):
+    """
+    Archive a file using the specified format.
+    
+    Args:
+        file_path (str): Path to the file to archive
+        archive_format (str): 'zip' or 'tar.gz'
+        
+    Returns:
+        str: Path to the created archive file
+    """
+    input_path = Path(file_path)
+    
+    if archive_format == 'zip':
+        archive_path = f"{file_path}.zip"
+        with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            zipf.write(file_path, arcname=input_path.name)
+        
+    elif archive_format == 'tar.gz':
+        archive_path = f"{file_path}.tar.gz"
+        with tarfile.open(archive_path, "w:gz") as tar:
+            tar.add(file_path, arcname=input_path.name)
+    
+    logging.info(f"Created archive: {archive_path}")
+    return archive_path
