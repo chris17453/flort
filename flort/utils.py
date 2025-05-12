@@ -125,56 +125,6 @@ def write_file(file_path: str, data: str, mode: str = 'a') -> None:
     except Exception as e:
         logging.error(f"An unexpected error occurred while writing to {file_path}: {e}")
 
-
-def generate_tree(path_list: list, output: str) -> None:
-    """
-    Generate a hierarchical tree structure from a list of paths.
-
-    Args:
-        path_list (list): List of dictionaries containing path information with keys:
-            - 'path': Path object
-            - 'depth': Integer depth in tree
-            - 'type': String indicating 'dir' or 'file'
-        output (str): Path to output file where tree will be written
-
-    The function:
-    1. Writes a header to the output
-    2. Processes each path in the list
-    3. Creates appropriate indentation based on depth
-    4. Formats directories with trailing slash
-    5. Writes the formatted tree to the output
-
-    Tree format example:
-    ## Directory Tree
-    root/
-    |-- dir1/
-    |   |-- file1.txt
-    |   |-- file2.txt
-    |-- dir2/
-        |-- subdir/
-            |-- file3.txt
-
-    Note:
-        - Directories end with '/'
-        - Indentation uses '|-- ' for items and '|   ' for depth
-        - Tree structure shows hierarchical relationships
-    """
-    write_file(output, "## Directory Tree\n")
-    structure = []
-
-    for item in path_list:
-        path = item["path"]
-        depth = item["depth"]
-        indent = '|   ' * (depth - 1) + '|-- ' if depth > 0 else ''
-        
-        if item['type'] == 'dir':
-            structure.append(f"{indent}{path.name}/")
-        elif item['type'] == 'file':
-            structure.append(f"{indent}{path.name}")
-    
-    write_file(output, '\n'.join(structure)+"\n\n\n")
-
-
 def configure_logging(verbose: bool) -> None:
     """
     Configure the logging system based on the verbosity level.
@@ -271,3 +221,87 @@ def archive_file(file_path, archive_format):
     
     logging.info(f"Created archive: {archive_path}")
     return archive_path
+
+def generate_tree(path_list: list, output: str) -> None:
+    """
+    Generate a hierarchical tree structure from a list of paths.
+    """
+    # Get current working directory for normalization
+    cwd = Path.cwd()
+    
+    # Normalize paths and add to a new list
+    normalized_paths = []
+    root_name = os.path.basename(cwd)
+    
+    for item in path_list:
+        # Skip the current directory entry itself
+        if str(item["path"]) == str(cwd) or item["relative_path"] == '.':
+            continue
+            
+        # Create a copy of the item to modify
+        new_item = item.copy()
+        
+        # Normalize relative path
+        rel_path = new_item["relative_path"]
+        if rel_path.startswith('./'):
+            rel_path = rel_path[2:]
+        
+        # For paths relative to cwd, prefix with root directory name
+        if not rel_path or rel_path == '.':
+            rel_path = root_name
+        elif not rel_path.startswith(root_name + '/'):
+            rel_path = f"{root_name}/{rel_path}"
+            
+        new_item["normalized_path"] = rel_path
+        
+        # Calculate depth based on path parts
+        path_parts = rel_path.split('/')
+        new_item["display_depth"] = len(path_parts) - 1
+        
+        normalized_paths.append(new_item)
+    
+    # Add root directory as first item if there are any paths
+    if normalized_paths:
+        normalized_paths.insert(0, {
+            "path": cwd,
+            "relative_path": ".",
+            "normalized_path": root_name,
+            "display_depth": 0,
+            "type": "dir"
+        })
+    
+    # Sort by normalized path
+    sorted_paths = sorted(normalized_paths, key=lambda x: x["normalized_path"])
+    
+    # Write header
+    write_file(output, "## Directory Tree\n")
+    structure = []
+    
+    # Track processed paths to avoid duplicates
+    processed = set()
+    
+    for item in sorted_paths:
+        norm_path = item["normalized_path"]
+        
+        # Skip duplicates
+        if norm_path in processed:
+            continue
+            
+        processed.add(norm_path)
+        
+        # Get the path components for display
+        path_parts = norm_path.split('/')
+        name = path_parts[-1]
+        depth = item["display_depth"]
+        
+        # Calculate indent
+        indent = '|   ' * depth + '|-- ' if depth > 0 else ''
+        
+        # Add to structure
+        if item["type"] == 'dir':
+            structure.append(f"{indent}{name}/")
+        else:
+            structure.append(f"{indent}{name}")
+    
+    # Write to output
+    write_file(output, '\n'.join(structure) + "\n\n\n")

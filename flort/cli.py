@@ -110,6 +110,15 @@ def main() -> None:
     else:
         ignore_dirs = []
 
+  
+    # If the output file exists, delete it first to prevent including it in the path list
+    output_path = Path(args.output)
+    if output_path.exists() and args.output != "stdio":
+        try:
+            output_path.unlink()
+            logging.info(f"Deleted existing output file: {args.output}")
+        except Exception as e:
+            logging.warning(f"Could not delete existing output file: {args.output} - {e}")
     
 
     # Then in the code, instead of parsing unknown args:
@@ -173,7 +182,6 @@ def main() -> None:
 
     # Process glob patterns if provided
     if args.glob:
-        print(path_list)
         glob_patterns = [pattern.strip() for pattern in args.glob.split(',')]
         print(f"Searching for glob patterns: {glob_patterns} in directories: {args.directories}")
         
@@ -239,6 +247,11 @@ def main() -> None:
                 })
             else:
                 logging.warning(f"Included file not found or invalid: {file_str}")
+
+   # Exclude the output file from the path list if it somehow got included
+    output_path_resolved = output_path.resolve()
+    path_list = [item for item in path_list if item["path"].resolve() != output_path_resolved]
+
 
     print(f"Output to {args.output}")
 

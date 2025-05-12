@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='flort',
-    version='0.1.9.7',
+    version='0.1.10.1',
     packages=find_packages(),
     entry_points={
         'console_scripts': [

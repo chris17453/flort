@@ -5,9 +5,10 @@ name = "pypi"
 
 [packages]
 argparse = "*"
-flort = "*"
 pytest = "*"
 setuptools = "*"
+twine = "*"
+flort = "*"
 
 [dev-packages]
 
