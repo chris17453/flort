@@ -1,9 +1,6 @@
 from pathlib import Path
 import logging
 import os
-from pathlib import Path
-import logging
-import os
 
 def get_paths(
     directories=None, 
@@ -31,72 +28,117 @@ def get_paths(
 
     path_list = []
     ignore_dirs = ignore_dirs or []
+    
+    # Resolve all ignore directories to absolute paths for consistent comparison
+    resolved_ignore_dirs = [ignore_dir.resolve() for ignore_dir in ignore_dirs]
 
     for base_directory in directories:
         base_path = Path(base_directory).resolve()
-        parent_path = base_path.parent.resolve()
-
+        
         if not base_path.is_dir():
             logging.error(f"The path {base_directory} is not a valid directory.")
             continue
 
         logging.info(f"Processing directory: {base_path}")
 
-        if any(base_path == ignore_dir or ignore_dir in base_path.parents for ignore_dir in ignore_dirs):
+        # Check if base directory should be ignored
+        if any(base_path == ignore_dir or _is_subdirectory(base_path, ignore_dir) 
+               for ignore_dir in resolved_ignore_dirs):
             logging.info(f"Skipping ignored directory: {base_path}")
             continue
 
+        # Calculate parent for relative paths
+        try:
+            parent_path = base_path.parent.resolve()
+        except Exception:
+            parent_path = Path.cwd()
+
+        # Add base directory to the list
+        try:
+            rel_path = str(base_path.relative_to(parent_path))
+        except ValueError:
+            rel_path = str(base_path)
+            
         path_list.append({
             "path": base_path, 
-            "relative_path": str(base_path.relative_to(parent_path)), 
+            "relative_path": rel_path, 
             "depth": 1, 
             'type': 'dir'
         })
 
-        def scan_directory(current_path, current_depth):
+        def scan_directory(current_path, current_depth, parent_for_relative):
+            """Recursively scan directory for files and subdirectories."""
             try:
                 with os.scandir(current_path) as entries:
                     for entry in sorted(entries, key=lambda e: e.name):
-                        entry_path = Path(entry.path)
+                        try:
+                            entry_path = Path(entry.path).resolve()
+                        except Exception as e:
+                            logging.warning(f"Could not resolve path {entry.path}: {e}")
+                            continue
 
                         # Skip hidden files/directories if not included
                         if not include_hidden and entry.name.startswith('.'):
                             continue
 
                         # Check if path should be ignored
-                        if any(ignore_dir == entry_path or ignore_dir in entry_path.parents 
-                              for ignore_dir in ignore_dirs):
-                            logging.info(f"Skipping ignored path: {entry_path}")
+                        if any(entry_path == ignore_dir or _is_subdirectory(entry_path, ignore_dir) 
+                               for ignore_dir in resolved_ignore_dirs):
+                            logging.debug(f"Skipping ignored path: {entry_path}")
                             continue
 
-                        relative_path = entry_path.relative_to(parent_path)
+                        # Calculate relative path
+                        try:
+                            relative_path = str(entry_path.relative_to(parent_for_relative))
+                        except ValueError:
+                            relative_path = str(entry_path)
 
                         if entry.is_dir():
                             path_list.append({
                                 "path": entry_path,
-                                "relative_path": str(relative_path),
+                                "relative_path": relative_path,
                                 "depth": current_depth,
                                 'type': 'dir'
                             })
                             # Recursively scan subdirectories
-                            scan_directory(entry_path, current_depth + 1)
+                            scan_directory(entry_path, current_depth + 1, parent_for_relative)
+                            
                         elif entry.is_file():
-                            if include_all or (extensions and entry_path.suffix.lower() in extensions):
+                            # Check if file should be included based on criteria
+                            should_include = False
+                            
+                            if include_all:
+                                should_include = True
+                            elif extensions:
+                                file_ext = entry_path.suffix.lower()
+                                should_include = file_ext in extensions
+                            
+                            if should_include:
                                 path_list.append({
                                     "path": entry_path,
-                                    "relative_path": str(relative_path),
+                                    "relative_path": relative_path,
                                     "depth": current_depth,
                                     'type': 'file'
                                 })
+                                
             except PermissionError as e:
                 logging.error(f"Permission denied accessing {current_path}: {e}")
             except Exception as e:
                 logging.error(f"Error processing {current_path}: {e}")
 
         # Start recursive scan from base directory
-        scan_directory(base_path, 2)  # Start depth at 2 since base dir is depth 1
+        scan_directory(base_path, 2, parent_path)  # Start depth at 2 since base dir is depth 1
 
     return path_list
+
+
+def _is_subdirectory(child_path, parent_path):
+    """Check if child_path is a subdirectory of parent_path."""
+    try:
+        child_path.relative_to(parent_path)
+        return True
+    except ValueError:
+        return False
 
 
 def get_files_from_glob_patterns(directories, glob_patterns, ignore_dirs=None, re_glob=True):
@@ -115,26 +157,36 @@ def get_files_from_glob_patterns(directories, glob_patterns, ignore_dirs=None, r
     if ignore_dirs is None:
         ignore_dirs = []
     
+    # Resolve all paths to absolute for consistent comparison
     ignore_dirs = [Path(d).resolve() for d in ignore_dirs]
     matching_files = []
     
     # For each specified directory
     for directory in directories:
         base_path = Path(directory).resolve()
-        print(f"Searching in: {base_path}")  # Debug output
+        logging.debug(f"Searching in: {base_path}")
         
         if not base_path.exists() or not base_path.is_dir():
-            print(f"Warning: Directory {base_path} does not exist or is not a directory")
+            logging.warning(f"Directory {base_path} does not exist or is not a directory")
             continue
             
         # For each glob pattern
         for pattern in glob_patterns:
-            print(f"Using pattern: {pattern}")  # Debug output
+            logging.debug(f"Using pattern: {pattern}")
             
             # If re_glob is True, apply globbing
             if re_glob:
-                file_paths = list(base_path.glob('**/' + pattern))
-                print(f"Found {len(file_paths)} matches for pattern {pattern}")  # Debug output
+                try:
+                    if '**' in pattern:
+                        # Pattern already includes recursive search
+                        file_paths = list(base_path.glob(pattern))
+                    else:
+                        # Add recursive search
+                        file_paths = list(base_path.glob('**/' + pattern))
+                    logging.debug(f"Found {len(file_paths)} matches for pattern {pattern}")
+                except Exception as e:
+                    logging.error(f"Error with glob pattern '{pattern}': {e}")
+                    continue
             else:
                 # If re_glob is False, treat patterns as file paths
                 file_path = Path(pattern)
@@ -144,6 +196,12 @@ def get_files_from_glob_patterns(directories, glob_patterns, ignore_dirs=None, r
                     file_paths = [base_path / pattern] if (base_path / pattern).exists() else []
             
             for file_path in file_paths:
+                try:
+                    file_path = file_path.resolve()
+                except Exception as e:
+                    logging.warning(f"Could not resolve path {file_path}: {e}")
+                    continue
+                    
                 # Skip directories
                 if not file_path.is_file():
                     continue
@@ -151,17 +209,13 @@ def get_files_from_glob_patterns(directories, glob_patterns, ignore_dirs=None, r
                 # Check if file is in an ignored directory
                 should_ignore = False
                 for ignore_dir in ignore_dirs:
-                    try:
-                        # Check if file_path is inside ignore_dir
-                        file_path.relative_to(ignore_dir)
+                    if _is_subdirectory(file_path, ignore_dir):
                         should_ignore = True
-                        print(f"Ignoring {file_path} (in ignored dir {ignore_dir})")  # Debug output
+                        logging.debug(f"Ignoring {file_path} (in ignored dir {ignore_dir})")
                         break
-                    except ValueError:
-                        # Not in this ignored directory
-                        pass
                 
-                if not should_ignore:
+                if not should_ignore and file_path not in matching_files:
                     matching_files.append(file_path)
+                    logging.debug(f"Added {file_path}")
     
     return matching_files

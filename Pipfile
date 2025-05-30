@@ -5,11 +5,11 @@ name = "pypi"
 
 [packages]
 argparse = "*"
-pytest = "*"
-setuptools = "*"
-twine = "*"
-flort = "*"
+wl-version-manager = "*"
 
 [dev-packages]
+setuptools = "*"
+twine = "*"
+pytest = "*"
 
 [requires]

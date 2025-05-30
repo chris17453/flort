@@ -8,3 +8,6 @@ junk
 Video
 t
 *.flort.txt
+build
+dist
+*egg*

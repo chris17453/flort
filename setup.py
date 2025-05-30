@@ -1,19 +1,23 @@
 from setuptools import setup, find_packages
+def get_version():
+    try:
+        from wl_version_manager import VersionManager
+        return VersionManager.get_version()
+    except ImportError:
+        return "0.1.0"
 
 setup(
     name='flort',
-    version='0.1.10.2',
+    version=get_version(),
     packages=find_packages(),
     entry_points={
         'console_scripts': [
             'flort = flort.wrapper:main'  # Changed to use the wrapper
         ]
     },
+    setup_requires=['wl_version_manager'],
     install_requires=[
-        'argparse',
-        'pathlib',  
-        'datetime', 
-        'logging',  
+        'wl_version_manager',
         'windows-curses;platform_system=="Windows"',  # Only on Windows, standard on Unix/Linux
       ],
     author='Chris Watkins',

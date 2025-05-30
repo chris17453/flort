@@ -78,10 +78,14 @@ def clean_content(file_path: Path) -> str:
         - Removes leading/trailing whitespace from each line
         - Removes completely empty lines
     """
-    with open(file_path, 'r') as file:
-        lines = file.readlines()
-        cleaned_lines = [line.strip() for line in lines if line.strip()]
-        return '\n'.join(cleaned_lines)
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            lines = file.readlines()
+            cleaned_lines = [line.strip() for line in lines if line.strip()]
+            return '\n'.join(cleaned_lines)
+    except Exception as e:
+        logging.error(f"Error cleaning content from {file_path}: {e}")
+        return ""
 
 
 def write_file(file_path: str, data: str, mode: str = 'a') -> None:
@@ -109,21 +113,22 @@ def write_file(file_path: str, data: str, mode: str = 'a') -> None:
     """
     try:
         if file_path == "stdio":
-            print(data)
+            print(data, end='')
         else:
             # Create parent directories if they don't exist
             Path(file_path).parent.mkdir(parents=True, exist_ok=True)
             
-            with open(file_path, mode) as file:
+            with open(file_path, mode, encoding='utf-8') as file:
                 file.write(data)
             
             operation = 'create' if mode == 'w' else 'append'
-            logging.info(f"Output written to: {file_path}. Mode: {operation}.")
+            logging.debug(f"Output written to: {file_path}. Mode: {operation}.")
             
     except IOError as e:
         logging.error(f"Failed to write to {file_path}: {e}")
     except Exception as e:
         logging.error(f"An unexpected error occurred while writing to {file_path}: {e}")
+
 
 def configure_logging(verbose: bool) -> None:
     """
@@ -139,33 +144,61 @@ def configure_logging(verbose: bool) -> None:
     level = logging.INFO if verbose else logging.WARNING
     logging.basicConfig(
         level=level,
-        format='%(asctime)s - %(levelname)s - %(message)s'
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        force=True  # Override any existing configuration
     )
 
-def count_tokens(text):
-   
-   def split_words(word):
-       if len(word) <= 4:
-           return [word]
-       return [word[i:i+4] for i in range(0, len(word), 4)]
 
-   pattern = r'[A-Za-z]+(?:\'[A-Za-z]+)?|[0-9]+(?:\.[0-9]+)?%?|[.,!?;:]|[@#$&*]+'
-   base_tokens = re.findall(pattern, text)
-   
-   tokens = []
-   for token in base_tokens:
-       tokens.extend(split_words(token))
-       
-   return len(tokens)
+def count_tokens(text):
+    """
+    Count tokens in text using a simple tokenization strategy.
+    
+    Args:
+        text (str): Text to tokenize
+        
+    Returns:
+        int: Number of tokens
+    """
+    if not text:
+        return 0
+        
+    def split_words(word):
+        if len(word) <= 4:
+            return [word]
+        return [word[i:i+4] for i in range(0, len(word), 4)]
+
+    pattern = r'[A-Za-z]+(?:\'[A-Za-z]+)?|[0-9]+(?:\.[0-9]+)?%?|[.,!?;:]|[@#$&*]+'
+    base_tokens = re.findall(pattern, text)
+    
+    tokens = []
+    for token in base_tokens:
+        tokens.extend(split_words(token))
+        
+    return len(tokens)
+
 
 def count_file_tokens(filename):
-   with open(filename, 'r') as f:
-       text = f.read()
-   
-   token_count = count_tokens(text)
-   char_count = len(text)
-   
-   return f"Tokens: {token_count:,}\nCharacters: {char_count:,}"
+    """
+    Count tokens and characters in a file.
+    
+    Args:
+        filename (str): Path to file to analyze
+        
+    Returns:
+        str: Formatted string with token and character counts
+    """
+    try:
+        with open(filename, 'r', encoding='utf-8') as f:
+            text = f.read()
+        
+        token_count = count_tokens(text)
+        char_count = len(text)
+        
+        return f"Tokens: {token_count:,}\nCharacters: {char_count:,}"
+    except Exception as e:
+        logging.error(f"Error counting tokens in {filename}: {e}")
+        return "Error counting tokens"
+
 
 def print_configuration(
     directories: list,
@@ -187,13 +220,13 @@ def print_configuration(
     This function provides visibility into the tool's configuration,
     which is particularly useful for debugging and verification.
     """
-    logging.info(f"Processing: {', '.join(directories)}")
-    logging.info(f"Types: {', '.join(extensions)}")
+    logging.info(f"Processing directories: {', '.join(directories)}")
+    if extensions:
+        logging.info(f"File types: {', '.join(extensions)}")
     logging.info(f"All files: {include_all}")
     logging.info(f"Hidden files: {include_hidden}")
     if ignore_dirs:
-        for dir in ignore_dirs:
-            logging.info(f"Omitting: {dir}")
+        logging.info(f"Ignoring directories: {', '.join([str(d) for d in ignore_dirs])}")
 
 
 def archive_file(file_path, archive_format):
@@ -209,23 +242,44 @@ def archive_file(file_path, archive_format):
     """
     input_path = Path(file_path)
     
-    if archive_format == 'zip':
-        archive_path = f"{file_path}.zip"
-        with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            zipf.write(file_path, arcname=input_path.name)
-        
-    elif archive_format == 'tar.gz':
-        archive_path = f"{file_path}.tar.gz"
-        with tarfile.open(archive_path, "w:gz") as tar:
-            tar.add(file_path, arcname=input_path.name)
+    if not input_path.exists():
+        logging.error(f"File to archive does not exist: {file_path}")
+        return None
     
-    logging.info(f"Created archive: {archive_path}")
-    return archive_path
+    try:
+        if archive_format == 'zip':
+            archive_path = f"{file_path}.zip"
+            with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                zipf.write(file_path, arcname=input_path.name)
+            
+        elif archive_format == 'tar.gz':
+            archive_path = f"{file_path}.tar.gz"
+            with tarfile.open(archive_path, "w:gz") as tar:
+                tar.add(file_path, arcname=input_path.name)
+        else:
+            logging.error(f"Unsupported archive format: {archive_format}")
+            return None
+        
+        logging.info(f"Created archive: {archive_path}")
+        return archive_path
+        
+    except Exception as e:
+        logging.error(f"Error creating archive: {e}")
+        return None
+
 
 def generate_tree(path_list: list, output: str) -> None:
     """
     Generate a hierarchical tree structure from a list of paths.
+    
+    Args:
+        path_list (list): List of path dictionaries
+        output (str): Output file path or "stdio"
     """
+    if not path_list:
+        write_file(output, "## Directory Tree\n(No files found)\n\n")
+        return
+        
     # Get current working directory for normalization
     cwd = Path.cwd()
     
@@ -270,7 +324,7 @@ def generate_tree(path_list: list, output: str) -> None:
             "type": "dir"
         })
     
-    # Sort by normalized path
+    # Sort by normalized path for consistent output
     sorted_paths = sorted(normalized_paths, key=lambda x: x["normalized_path"])
     
     # Write header
