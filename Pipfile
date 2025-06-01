@@ -5,9 +5,9 @@ name = "pypi"
 
 [packages]
 argparse = "*"
-wl-version-manager = "*"
 
 [dev-packages]
+wl-version-manager = "*"
 setuptools = "*"
 twine = "*"
 pytest = "*"

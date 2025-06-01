@@ -27,7 +27,7 @@ increment-version:
 	@if [ ! -f VERSION ]; then $(PYTHON) -m ${VERSION_MANAGER} init; fi
 	$(VERSION_MANAGER) patch
 
-upload: build
+upload: 
 	twine upload dist/*
 
 # Set up the test environment

@@ -1,10 +1,8 @@
 from setuptools import setup, find_packages
+
 def get_version():
-    try:
-        from wl_version_manager import VersionManager
-        return VersionManager.get_version()
-    except ImportError:
-        return "0.1.0"
+    with open("VERSION", "r") as f:
+        return f.read().strip()
 
 setup(
     name='flort',
@@ -15,11 +13,11 @@ setup(
             'flort = flort.wrapper:main'  # Changed to use the wrapper
         ]
     },
-    setup_requires=['wl_version_manager'],
     install_requires=[
-        'wl_version_manager',
         'windows-curses;platform_system=="Windows"',  # Only on Windows, standard on Unix/Linux
       ],
+
+    include_package_data=True,
     author='Chris Watkins',
     author_email='chris@watkinslabs.com',
     description='A utility to flatten your source code directory into a single file for LLM usage',
