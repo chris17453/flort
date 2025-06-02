@@ -5,6 +5,7 @@ name = "pypi"
 
 [packages]
 argparse = "*"
+pytest = "*"
 
 [dev-packages]
 wl-version-manager = "*"

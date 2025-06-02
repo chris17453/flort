@@ -8,7 +8,7 @@ directory trees, create Python module outlines, and concatenate source files whi
 respecting various filtering options.
 
 The tool is particularly useful for:
-- Creating project overviews
+- Creating project overviews for LLMs
 - Generating documentation
 - Sharing code in a single file
 - Analyzing project structure
@@ -17,22 +17,28 @@ Usage:
     flort [DIRECTORY...] [--extension...] [options]
 
 Example:
-    flort . --py --js --output=project.txt --hidden
+    flort . --extensions py,js --exclude-extensions pyc --output=project.txt
 """
 
 import os
 import argparse
 import logging
+import sys
 from datetime import datetime
 from pathlib import Path
+from typing import List, Optional
 
-from .utils import generate_tree, write_file, configure_logging, print_configuration, count_file_tokens, archive_file
-from .traverse import get_paths, get_files_from_glob_patterns
-from .concatinate_files import concat_files
+from .utils import (
+    generate_tree, write_file, configure_logging, print_configuration, 
+    count_file_tokens, archive_file, sanitize_output_path
+)
+from .traverse import get_paths, add_specific_files
+from .concatenate_files import concat_files, create_file_manifest
 from .python_outline import python_outline_files
-from .curses_selector import select_files
 
-def get_version():
+
+def get_version() -> str:
+    """Get the package version."""
     try:
         # Use importlib.metadata (Python 3.8+) or importlib_metadata for older versions
         try:
@@ -44,350 +50,738 @@ def get_version():
         return "unknown"
 
 
+def validate_arguments(args: argparse.Namespace,extensions,include_patterns) -> tuple[bool, Optional[str]]:
+    """
+    Validate command line arguments for consistency and correctness.
+    
+    Args:
+        args: Parsed command line arguments
+        
+    Returns:
+        tuple: (is_valid, error_message)
+    """
+    # Validate we have something to process - BUT skip this check if using UI
+    if not args.ui and not extensions and not args.all and not include_patterns:
+        logging.error("No extensions or glob provided and --all flag not set. No files to process.")
+        return False, ("No files will be processed. Use --extensions, --glob, "
+                      "--include-files, --all, or --ui to specify what to include.")
+    
+    return True, None
+
+
+def generate_config_output(
+    directories: List[str],
+    extensions: List[str],
+    exclude_extensions: List[str],
+    include_patterns: List[str],
+    exclude_patterns: List[str],
+    include_files: List[str],
+    ignore_dirs: List[Path],
+    include_all: bool,
+    include_hidden: bool,
+    include_binary: bool,
+    max_depth: Optional[int],
+    output_path: str,
+    other_flags: dict
+) -> str:
+    """
+    Generate configuration output showing all settings used.
+    
+    Args:
+        directories: List of directories being processed
+        extensions: List of included extensions
+        exclude_extensions: List of excluded extensions  
+        include_patterns: List of include glob patterns
+        exclude_patterns: List of exclude glob patterns
+        include_files: List of specifically included files
+        ignore_dirs: List of ignored directories
+        include_all: Whether all files are included
+        include_hidden: Whether hidden files are included
+        include_binary: Whether binary files are included
+        max_depth: Maximum traversal depth
+        output_path: Output file path
+        other_flags: Dict of other boolean flags
+        
+    Returns:
+        str: Formatted configuration string
+    """
+    config_lines = [
+        "## Flort Configuration",
+        f"Working Directory: {Path.cwd()}",
+        f"Output File: {output_path}",
+        f"Target Directories: {', '.join(directories)}",
+        ""
+    ]
+    
+    # File inclusion criteria
+    inclusion_criteria = []
+    if include_all:
+        inclusion_criteria.append("All files (--all)")
+    if extensions:
+        inclusion_criteria.append(f"Extensions: {', '.join(extensions)}")
+    if include_patterns:
+        inclusion_criteria.append(f"Include patterns: {', '.join(include_patterns)}")
+    if include_files:
+        inclusion_criteria.append(f"Specific files: {', '.join(include_files)}")
+    
+    if inclusion_criteria:
+        config_lines.append("### Inclusion Criteria:")
+        for criteria in inclusion_criteria:
+            config_lines.append(f"- {criteria}")
+        config_lines.append("")
+    
+    # File exclusion criteria
+    exclusion_criteria = []
+    if exclude_extensions:
+        exclusion_criteria.append(f"Extensions: {', '.join(exclude_extensions)}")
+    if exclude_patterns:
+        exclusion_criteria.append(f"Patterns: {', '.join(exclude_patterns)}")
+    if ignore_dirs:
+        exclusion_criteria.append(f"Directories: {', '.join(str(d) for d in ignore_dirs)}")
+    if not include_binary:
+        exclusion_criteria.append("Binary files (use --include-binary to include)")
+    if not include_hidden:
+        exclusion_criteria.append("Hidden files (use --hidden to include)")
+    
+    if exclusion_criteria:
+        config_lines.append("### Exclusion Criteria:")
+        for criteria in exclusion_criteria:
+            config_lines.append(f"- {criteria}")
+        config_lines.append("")
+    
+    # Processing options
+    processing_options = []
+    if max_depth is not None:
+        processing_options.append(f"Maximum depth: {max_depth}")
+    if other_flags.get('clean_content', True):
+        processing_options.append("Content cleaning: enabled")
+    else:
+        processing_options.append("Content cleaning: disabled")
+    
+    # Output options
+    output_options = []
+    if other_flags.get('no_tree'):
+        output_options.append("Directory tree: disabled")
+    else:
+        output_options.append("Directory tree: enabled")
+        
+    if other_flags.get('outline'):
+        output_options.append("Python outline: enabled")
+    else:
+        output_options.append("Python outline: disabled")
+        
+    if other_flags.get('no_dump'):
+        output_options.append("File concatenation: disabled")
+    elif other_flags.get('manifest'):
+        output_options.append("File manifest: enabled (no content)")
+    else:
+        output_options.append("File concatenation: enabled")
+        
+    if other_flags.get('archive'):
+        output_options.append(f"Archive format: {other_flags['archive']}")
+    
+    all_options = processing_options + output_options
+    if all_options:
+        config_lines.append("### Processing Options:")
+        for option in all_options:
+            config_lines.append(f"- {option}")
+        config_lines.append("")
+    
+    # Detection summary
+    only_include_files = (
+        include_files and 
+        not extensions and 
+        not include_all and 
+        not include_patterns
+    )
+    
+    if only_include_files:
+        config_lines.append("### Mode: Specific Files Only")
+        config_lines.append("Directory scanning disabled - only processing specified files")
+    else:
+        config_lines.append("### Mode: Directory Scanning")
+        config_lines.append("Scanning directories with applied filters")
+    
+    config_lines.extend(["", "---", ""])
+    
+    return "\n".join(config_lines)
+
+
+def parse_comma_separated_list(value: Optional[str]) -> List[str]:
+    """
+    Parse a comma-separated string into a list of stripped values.
+    
+    Args:
+        value: Comma-separated string or None
+        
+    Returns:
+        list: List of stripped values, empty if input was None
+    """
+    if not value:
+        return []
+    return [item.strip() for item in value.split(',') if item.strip()]
+
+
+def parse_ignore_dirs(ignore_dirs_str: Optional[str], base_dirs: List[str]) -> List[Path]:
+    """
+    Parse ignore directories string and convert to resolved Path objects.
+    
+    Args:
+        ignore_dirs_str: Comma-separated string of directories to ignore
+        base_dirs: List of base directories for resolving relative paths
+        
+    Returns:
+        list: List of resolved Path objects
+    """
+    if not ignore_dirs_str:
+        return []
+    
+    ignore_dirs = []
+    base_path = Path(base_dirs[0]).resolve() if base_dirs else Path.cwd()
+    
+    for ignore_dir_str in parse_comma_separated_list(ignore_dirs_str):
+        ignore_path = Path(ignore_dir_str)
+        
+        # Handle both absolute and relative paths
+        if ignore_path.is_absolute():
+            ignore_dirs.append(ignore_path.resolve())
+        else:
+            # Resolve relative to first base directory or cwd
+            ignore_dirs.append((base_path / ignore_path).resolve())
+    
+    if ignore_dirs:
+        logging.info(f"Will ignore directories: {[str(d) for d in ignore_dirs]}")
+    
+    return ignore_dirs
+
+
+def setup_argument_parser() -> argparse.ArgumentParser:
+    """
+    Set up and configure the command line argument parser.
+    
+    Returns:
+        argparse.ArgumentParser: Configured parser
+    """
+    parser = argparse.ArgumentParser(
+        description="flort: Create a single file containing all source code from specified "
+                   "directories, with comprehensive filtering and organization options.",
+        prog='flort',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  flort . --extensions py,js,ts                    # Include Python, JavaScript, TypeScript
+  flort . --all --exclude-extensions pyc,pyo       # All files except compiled Python
+  flort . --extensions py --exclude-patterns "*test*,*cache*"  # Python excluding tests
+  flort . --glob "*.py" --include-files config.ini # Glob patterns + specific files
+  flort . --extensions py --ignore-dirs __pycache__,venv      # Ignore specific directories
+  flort src tests --output project.txt --archive zip         # Multiple dirs with archive
+        """
+    )
+
+    # Positional arguments
+    parser.add_argument(
+        'directories', 
+        metavar='DIRECTORY',
+        nargs='*',
+        default=["."],
+        help='Directories to process (default: current directory)'
+    )
+
+    # Core functionality
+    parser.add_argument(
+        '-e', '--extensions', 
+        type=str,
+        help='File extensions to include (comma-separated, no dots: py,js,txt)'
+    )
+    
+    parser.add_argument(
+        '--exclude-extensions',
+        type=str,
+        help='File extensions to exclude (comma-separated, no dots: pyc,pyo,min.js)'
+    )
+    
+    parser.add_argument(
+        '-g', '--glob', 
+        type=str,
+        help='Glob patterns to include (comma-separated: "*.py,src/**/*.js")'
+    )
+    
+    parser.add_argument(
+        '--exclude-patterns',
+        type=str,
+        help='Glob patterns to exclude (comma-separated: "*test*,*cache*,*.min.*")'
+    )
+    
+    parser.add_argument(
+        '-f', '--include-files', 
+        type=str,
+        help='Specific files to include regardless of other filters (comma-separated)'
+    )
+    
+    parser.add_argument(
+        '-i', '--ignore-dirs', 
+        type=str,
+        help='Directories to ignore completely (comma-separated)'
+    )
+
+    # Output options
+    parser.add_argument(
+        '-o', '--output', 
+        type=str,
+        default=f"{os.path.basename(os.getcwd())}.flort.txt",
+        help='Output file path (default: <current_dir>.flort.txt, "stdio" for console)'
+    )
+    
+    parser.add_argument(
+        '-z', '--archive', 
+        type=str,
+        choices=['zip', 'tar.gz'],
+        help='Create archive of output file (zip or tar.gz)'
+    )
+
+    # Content control flags
+    parser.add_argument(
+        '-a', '--all', 
+        action='store_true',
+        help='Include all files regardless of extension (respects exclude filters)'
+    )
+    
+    parser.add_argument(
+        '-H', '--hidden', 
+        action='store_true',
+        help='Include hidden files and directories'
+    )
+    
+    parser.add_argument(
+        '--include-binary', 
+        action='store_true',
+        help='Include binary files (normally excluded for safety)'
+    )
+    
+    parser.add_argument(
+        '--max-depth', 
+        type=int,
+        help='Maximum directory depth to traverse'
+    )
+
+    # Output format options
+    parser.add_argument(
+        '-O', '--outline', 
+        action='store_true',
+        help='Generate Python class/function outline instead of full source'
+    )
+    
+    parser.add_argument(
+        '-n', '--no-dump', 
+        action='store_true',
+        help='Do not concatenate file contents (directory tree and outline only)'
+    )
+    
+    parser.add_argument(
+        '-t', '--no-tree', 
+        action='store_true',
+        help='Do not generate directory tree'
+    )
+    
+    parser.add_argument(
+        '--manifest', 
+        action='store_true',
+        help='Generate file manifest instead of concatenating content'
+    )
+    
+    parser.add_argument(
+        '--clean-content', 
+        action='store_true',
+        default=True,
+        help='Clean whitespace from file content (default: enabled)'
+    )
+    
+    parser.add_argument(
+        '--no-clean', 
+        dest='clean_content',
+        action='store_false',
+        help='Do not clean whitespace from file content'
+    )
+    
+    parser.add_argument(
+        '--show-config',
+        action='store_true',
+        help='Show configuration settings at the beginning of the output'
+    )
+
+    # Interface options
+    parser.add_argument(
+        '-u', '--ui', 
+        action='store_true',
+        help='Launch interactive file selector (discovers and selects files visually)'
+    )
+
+    # Utility options
+    parser.add_argument(
+        '-v', '--verbose', 
+        action='store_true',
+        help='Enable verbose logging (INFO level)'
+    )
+    
+    parser.add_argument(
+        '--version', 
+        action='version', 
+        version=f'flort {get_version()}',
+        help='Show program version and exit'
+    )
+
+    return parser
+
+
+def process_ui_integration(args: argparse.Namespace) -> argparse.Namespace:
+    """
+    Integrate UI selections with command-line arguments.
+    
+    Args:
+        args: Parsed command line arguments
+        
+    Returns:
+        argparse.Namespace: Updated arguments with UI selections
+    """
+    if not args.ui:
+        return args
+    
+    # Try curses-based UI first
+    try:
+        import curses
+        
+        try:
+            from .curses_selector import select_files
+            use_curses = True
+        except ImportError:
+            use_curses = False
+        
+        if use_curses:
+            print("🎨 Starting interactive file selector (curses-based)...")
+        else:
+            print("📝 Curses not available, using simple text-based selector...")
+            
+    except ImportError:
+        use_curses = False
+        print("📝 Using simple text-based file selector...")
+    
+    try:
+        # Prepare current settings for UI
+        current_extensions = parse_comma_separated_list(args.extensions)
+        current_include_files = parse_comma_separated_list(args.include_files)
+        current_ignore_dirs = parse_ignore_dirs(args.ignore_dirs, args.directories)
+        
+        # Launch appropriate UI
+        if use_curses:
+            from .curses_selector import select_files
+            result = select_files(
+                start_path=args.directories[0] if args.directories else ".",
+                preselected_filters=[f".{ext}" for ext in current_extensions],
+                included_files=current_include_files,
+                ignored_dirs=[str(d) for d in current_ignore_dirs],
+                included_dirs=args.directories if args.directories != ["."] else None
+            )
+        else:
+            from .simple_selector import simple_select_files
+            result = simple_select_files(
+                start_path=args.directories[0] if args.directories else ".",
+                preselected_filters=[f".{ext}" for ext in current_extensions],
+                included_files=current_include_files,
+                ignored_dirs=[str(d) for d in current_ignore_dirs],
+                included_dirs=args.directories if args.directories != ["."] else None
+            )
+        
+        if result is None:
+            logging.info("UI selection cancelled")
+            sys.exit(0)
+        
+        # Merge UI results with CLI arguments (UI selections are additive)
+        ui_extensions = [ext.lstrip('.') for ext in result.get("file_types", []) if ext and ext != "*"]
+        if ui_extensions:
+            existing_extensions = current_extensions
+            combined_extensions = list(set(existing_extensions + ui_extensions))
+            args.extensions = ','.join(combined_extensions) if combined_extensions else None
+        
+        # Add UI ignored directories
+        ui_ignored = [Path(p) for p in result.get("ignored", []) if p]
+        if ui_ignored:
+            existing_ignored = current_ignore_dirs
+            combined_ignored = existing_ignored + ui_ignored
+            unique_ignored = []
+            seen = set()
+            for d in combined_ignored:
+                d_str = str(d)
+                if d_str not in seen:
+                    seen.add(d_str)
+                    unique_ignored.append(d)
+            
+            if unique_ignored:
+                args.ignore_dirs = ','.join(str(d) for d in unique_ignored)
+        
+        # Update directories if UI made selections
+        ui_selected = [p for p in result.get("selected", []) if Path(p).is_dir()]
+        if ui_selected:
+            args.directories = ui_selected
+        
+        logging.info("UI selections integrated with command-line arguments")
+        
+    except KeyboardInterrupt:
+        print("\n❌ UI cancelled by user")
+        sys.exit(0)
+    except Exception as e:
+        logging.error(f"Error in UI integration: {e}")
+        print(f"❌ UI failed to start: {e}")
+        print("📝 Continuing without interactive mode...")
+        args.ui = False  # Disable UI and continue
+    
+    return args
+
+
+def exclude_output_file(path_list: List[dict], output_path: str) -> List[dict]:
+    """
+    Remove the output file from the path list to prevent self-inclusion.
+    
+    Args:
+        path_list: List of path dictionaries
+        output_path: Output file path
+        
+    Returns:
+        list: Updated path list with output file excluded
+    """
+    if output_path == "stdio":
+        return path_list
+    
+    try:
+        output_resolved = sanitize_output_path(output_path)
+        original_count = len(path_list)
+        
+        filtered_list = []
+        for item in path_list:
+            try:
+                item_resolved = item["path"].resolve()
+                if item_resolved != output_resolved:
+                    filtered_list.append(item)
+            except Exception as e:
+                logging.debug(f"Error resolving path {item['path']}: {e}")
+                filtered_list.append(item)  # Include if we can't resolve
+        
+        excluded_count = original_count - len(filtered_list)
+        if excluded_count > 0:
+            logging.info(f"Excluded {excluded_count} output file(s) from processing")
+        
+        return filtered_list
+        
+    except Exception as e:
+        logging.error(f"Error excluding output file: {e}")
+        return path_list
+
+
 def main() -> None:
     """
     Main entry point for the Flort tool.
 
-    This function:
-    1. Sets up argument parsing with detailed help messages
-    2. Configures logging based on verbosity
-    3. Processes command line arguments
-    4. Generates the output file containing:
-        - Directory tree (optional)
-        - Python module outline (if requested)
-        - Concatenated source files (unless disabled)
+    This function orchestrates the entire file processing pipeline:
+    1. Parse and validate command line arguments
+    2. Configure logging and validate inputs
+    3. Integrate UI selections if requested
+    4. Discover files using the comprehensive filtering system
+    5. Generate outputs (tree, outline, concatenation) as requested
+    6. Create archives if specified
+    7. Report final statistics
 
     Returns:
         None
 
     Raises:
-        SystemExit: If required arguments are missing or invalid
+        SystemExit: If arguments are invalid or critical errors occur
     """
-    output_file = f"{os.path.basename(os.getcwd())}.flort.txt"
-    current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-    # Create argument parser with comprehensive help
-    parser = argparse.ArgumentParser(
-        description="flort: create a single file of all given extensions, "
-                    "recursively for all directories given. Ignores binary files.",
-        prog='flort',
-        add_help=False,
-        prefix_chars='-',
-        allow_abbrev=False
-    )
-
-    parser.add_argument('directories', metavar='directories',
-                        help='Directories to list files from, defaults to the current working directory.',
-                        default=".", type=str, nargs='*')
-    parser.add_argument('-h', '--help', action='help',
-                        help='Show this help message and exit.')
-    parser.add_argument('--version', action='version', version=f'flort {get_version()}',
-                        help='Show program version and exit.')
+    # Parse arguments
+    parser = setup_argument_parser()
+    args = parser.parse_args()
     
-    parser.add_argument('-i', '--ignore-dirs', type=str,
-                        help='Directories to ignore (comma-separated list).')
-    parser.add_argument('-o', '--output', type=str,
-                        help='Output file path. Defaults to the basename of the current directory '
-                            'if not specified. "stdio" will output to console.', default=output_file)
-    parser.add_argument('-O', '--outline', action='store_true',
-                        help='Create an outline of the files instead of a source dump.')
-    parser.add_argument('-n', '--no-dump', action='store_true',
-                        help='Do not dump the source files')
-    parser.add_argument('-t', '--no-tree', action='store_true',
-                        help='Do not print the tree at the beginning.')
-    parser.add_argument('-a', '--all', action='store_true',
-                        help='Include all files regardless of extensions.')
-    parser.add_argument('-H', '--hidden', action='store_true',
-                        help='Include hidden files.')
-    parser.add_argument('-v', '--verbose', action='store_true',
-                        help='Enable verbose logging (INFO level).')
-    parser.add_argument('-f', '--include-files', type=str,
-                        help='Comma-separated list of files to include regardless of search filter.')
-    parser.add_argument('-u', '--ui', action='store_true',
-                    help='Launch interactive file selector UI')
-    parser.add_argument('-g', '--glob', type=str,
-                        help='Glob patterns to match files recursively (comma-separated list).',
-                        metavar='GLOB')
-    parser.add_argument('-z', '--archive', type=str, choices=['zip', 'tar.gz'],
-                        help='Archive the output file using the specified format.')    
-    parser.add_argument('-e', '--extensions', type=str,
-                    help='File extensions to include (comma-separated, without dots: py,js,txt)')
-
-    args, unknown_args = parser.parse_known_args()
-
-    # Configure logging based on verbosity flag
+    # Configure logging early
     configure_logging(args.verbose)
 
-    # Validate directories exist
-    validated_dirs = []
-    for directory in args.directories:
-        dir_path = Path(directory)
-        if dir_path.exists() and dir_path.is_dir():
-            validated_dirs.append(directory)
-        else:
-            logging.error(f"Directory does not exist or is not a directory: {directory}")
+    # Parse and prepare arguments
+    directories = args.directories
+    extensions = parse_comma_separated_list(args.extensions)
+    exclude_extensions = parse_comma_separated_list(args.exclude_extensions)
+    include_patterns = parse_comma_separated_list(args.glob)
+    exclude_patterns = parse_comma_separated_list(args.exclude_patterns)
+    include_files = parse_comma_separated_list(args.include_files)
+    ignore_dirs = parse_ignore_dirs(args.ignore_dirs, directories)
     
-    if not validated_dirs:
-        logging.error("No valid directories provided")
-        return
+
+
+    # Validate arguments
+    is_valid, error_msg = validate_arguments(args,extensions,include_patterns)
+    if not is_valid:
+        logging.error(error_msg)
+        parser.print_help()
+        sys.exit(1)
     
-    args.directories = validated_dirs
-
-    # Validate archive format
-    if args.archive and args.archive not in ['zip', 'tar.gz']:
-        logging.error(f"Invalid archive format: {args.archive}. Must be 'zip' or 'tar.gz'")
-        return
-
-    # Check if output directory is writable
-    if args.output != "stdio":
-        output_dir = Path(args.output).parent
-        if not output_dir.exists():
-            try:
-                output_dir.mkdir(parents=True, exist_ok=True)
-                logging.info(f"Created output directory: {output_dir}")
-            except Exception as e:
-                logging.error(f"Cannot create output directory {output_dir}: {e}")
-                return
-
-    # Process ignore_dirs argument - FIXED
-    ignore_dirs = []
-    if args.ignore_dirs:
-        for ignore_dir_str in args.ignore_dirs.split(','):
-            ignore_dir_str = ignore_dir_str.strip()
-            if not ignore_dir_str:
-                continue
-            ignore_path = Path(ignore_dir_str)
-            
-            # Handle both absolute and relative paths
-            if ignore_path.is_absolute():
-                ignore_dirs.append(ignore_path.resolve())
-            else:
-                # Resolve relative to current working directory
-                ignore_dirs.append((Path.cwd() / ignore_path).resolve())
-                
-        logging.info(f"Ignoring directories: {[str(d) for d in ignore_dirs]}")
-
-    # If the output file exists, delete it first - IMPROVED
-    output_path = Path(args.output)
-    if args.output != "stdio":
-        # Resolve to absolute path for comparison
-        output_path_abs = output_path.resolve()
-        
-        if output_path_abs.exists():
-            try:
-                output_path_abs.unlink()
-                logging.info(f"Deleted existing output file: {args.output}")
-            except Exception as e:
-                logging.error(f"Could not delete existing output file: {args.output} - {e}")
-                return  # Exit if we can't delete the existing file
-        
-        # Store the absolute path for later exclusion
-        output_path_resolved = output_path_abs
-    else:
-        output_path_resolved = None
-
-    # Process extensions
-    extensions = []
-    if args.extensions:
-        extensions = [f".{ext.strip()}" for ext in args.extensions.split(',') if ext.strip()]
-    
-    # Process UI selection
+    # Process UI integration
     if args.ui:
-        included_files = args.include_files.split(',') if args.include_files else None
-        included_dirs = args.directories if args.directories and args.directories[0] != "." else None
-        
-        result = select_files(
-            start_path="." if not args.directories or args.directories[0] == "." else args.directories[0],
-            preselected_filters=extensions,
-            included_files=included_files,
-            ignored_dirs=ignore_dirs,
-            included_dirs=included_dirs
-        )
-
-        if result is None:
-            return
-            
-        # Update settings based on UI selection
-        ui_extensions = [ext for ext in result["file_types"] if ext]
-        extensions.extend(ui_extensions)
-        extensions = list(set(extensions))  # Remove duplicates
-        
-        # Add ignored directories from UI
-        ui_ignored = [Path(p).resolve() for p in result["ignored"] if p]
-        ignore_dirs.extend(ui_ignored)
-        
-        # Override directories with selected ones
-        selected_dirs = [str(Path(p)) for p in result["selected"] if Path(p).is_dir()]
-        if selected_dirs:
-            args.directories = selected_dirs
-
-    # Validate we have something to process - MOVED after UI
-    if not extensions and not args.all and not args.glob:
-        logging.error("No extensions or glob provided and --all flag not set. No files to process.")
-        return
-
-    # Log configuration settings
+        args = process_ui_integration(args)
+        # Re-validate after UI changes
+        is_valid, error_msg = validate_arguments(args,extensions,include_patterns)
+        if not is_valid:
+            logging.error(f"Invalid configuration after UI integration: {error_msg}")
+            sys.exit(1)
+    
+    # Sanitize output path
+    output_path = sanitize_output_path(args.output)
+    output_str = str(output_path) if output_path.name != "stdio" else "stdio"
+    
+    # Log configuration
     print_configuration(
-        args.directories,
-        extensions,
-        args.all,
-        args.hidden,
-        ignore_dirs
-    )
-
-    # Initialize output file with timestamp
-    write_file(args.output, f"## Florted: {current_datetime}\n", 'w')
-
-    # Get list of files to process
-    path_list = get_paths(
-        args.directories,
+        directories=directories,
         extensions=extensions,
+        exclude_extensions=exclude_extensions,
+        exclude_patterns=exclude_patterns,
         include_all=args.all,
         include_hidden=args.hidden,
-        ignore_dirs=ignore_dirs
+        ignore_dirs=ignore_dirs,
+        include_files=include_files,
+        glob_patterns=include_patterns
     )
-
-    # Process glob patterns if provided - FIXED VERSION
-    if args.glob:
-        glob_patterns = [pattern.strip() for pattern in args.glob.split(',') if pattern.strip()]
-        logging.info(f"Searching for glob patterns: {glob_patterns} in directories: {args.directories}")
+    
+    # Initialize output file with timestamp
+    current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    if not write_file(output_str, f"## Florted: {current_datetime}\n", 'w'):
+        logging.error(f"Failed to initialize output file: {output_str}")
+        sys.exit(1)
+    
+    # Add configuration output if requested
+    if args.show_config:
+        config_output = generate_config_output(
+            directories=directories,
+            extensions=extensions,
+            exclude_extensions=exclude_extensions,
+            include_patterns=include_patterns,
+            exclude_patterns=exclude_patterns,
+            include_files=include_files,
+            ignore_dirs=ignore_dirs,
+            include_all=args.all,
+            include_hidden=args.hidden,
+            include_binary=args.include_binary,
+            max_depth=args.max_depth,
+            output_path=output_str,
+            other_flags={
+                'clean_content': args.clean_content,
+                'no_tree': args.no_tree,
+                'outline': args.outline,
+                'no_dump': args.no_dump,
+                'manifest': args.manifest,
+                'archive': args.archive
+            }
+        )
+        if not write_file(output_str, config_output):
+            logging.error("Failed to write configuration output")
+            sys.exit(1)
+    
+    # Get file paths using the comprehensive discovery system
+    logging.info("Starting file discovery...")
+    
+    try:
+        # If only include_files is specified (no extensions, no --all, no glob), 
+        # then ONLY process those files
+        only_include_files = (
+            include_files and 
+            not extensions and 
+            not args.all and 
+            not include_patterns and
+            not args.glob
+        )
         
-        # Create a list of directories to search
-        search_dirs = []
-        for d in args.directories:
-            dir_path = Path(d).resolve()
-            if dir_path.is_dir():
-                search_dirs.append(dir_path)
-            else:
-                logging.warning(f"Skipping {dir_path} - not a directory")
-        
-        # Process each glob pattern
-        for pattern in glob_patterns:
-            logging.info(f"Processing pattern: {pattern}")
-            
-            # Search in each directory
-            for base_dir in search_dirs:
-                logging.debug(f"Searching for '{pattern}' in {base_dir}")
-                
-                try:
-                    # Use recursive glob with proper pattern handling
-                    if '**' in pattern:
-                        # Pattern already has recursive component
-                        matches = list(base_dir.glob(pattern))
-                    else:
-                        # Add recursive search
-                        matches = list(base_dir.glob('**/' + pattern))
-                    
-                    logging.debug(f"Found {len(matches)} matches for pattern '{pattern}' in {base_dir}")
-                    
-                    for file_path in matches:
-                        if not file_path.is_file():
-                            continue
-                            
-                        # Check if in ignored directory
-                        should_ignore = False
-                        for ignore_dir in ignore_dirs:
-                            try:
-                                file_path.relative_to(ignore_dir)
-                                should_ignore = True
-                                logging.debug(f"Ignoring {file_path} (in ignored dir {ignore_dir})")
-                                break
-                            except ValueError:
-                                pass
-                        
-                        if not should_ignore:
-                            logging.debug(f"Adding: {file_path}")
-                            try:
-                                rel_path = str(file_path.relative_to(Path.cwd()))
-                            except ValueError:
-                                rel_path = str(file_path)
-                                
-                            # Check if not already in path_list (avoid duplicates)
-                            if not any(str(item.get("path")) == str(file_path) for item in path_list):
-                                path_list.append({
-                                    "path": file_path,
-                                    "relative_path": rel_path,
-                                    "depth": len(file_path.parts) - len(Path.cwd().parts),
-                                    "type": "file"
-                                })
-                                
-                except Exception as e:
-                    logging.error(f"Error processing glob pattern '{pattern}' in {base_dir}: {e}")
-                            
-    # Add included files from --include-files option - FIXED
-    if args.include_files:
-        for file_str in args.include_files.split(','):
-            file_str = file_str.strip()
-            if not file_str:
-                continue
-                
-            file_path = Path(file_str)
-            
-            # Handle both absolute and relative paths
-            if not file_path.is_absolute():
-                file_path = Path.cwd() / file_path
-                
-            file_path = file_path.resolve()
-            
-            if file_path.exists() and file_path.is_file():
-                try:
-                    rel_path = str(file_path.relative_to(Path.cwd()))
-                except ValueError:
-                    rel_path = str(file_path)
-                    
-                # Check if not already in path_list
-                if not any(str(item.get("path")) == str(file_path) for item in path_list):
-                    path_list.append({
-                        "path": file_path,
-                        "relative_path": rel_path,
-                        "depth": 1,
-                        "type": "file"
-                    })
-                    logging.info(f"Added included file: {rel_path}")
-            else:
-                logging.warning(f"Included file not found or invalid: {file_str}")
-
-    # Exclude the output file from the path list if it somehow got included - IMPROVED
-    if output_path_resolved:
-        original_count = len(path_list)
-        path_list = [item for item in path_list 
-                    if item["path"].resolve() != output_path_resolved]
-        excluded_count = original_count - len(path_list)
-        if excluded_count > 0:
-            logging.info(f"Excluded {excluded_count} output file(s) from processing")
-
+        if only_include_files:
+            logging.info("Only processing specifically included files (no directory scanning)")
+            path_list = []
+            path_list = add_specific_files(path_list, include_files, Path(directories[0]))
+        else:
+            path_list = get_paths(
+                directories=directories,
+                extensions=extensions,
+                exclude_extensions=exclude_extensions,
+                include_patterns=include_patterns,
+                exclude_patterns=exclude_patterns,
+                include_all=args.all,
+                include_hidden=args.hidden,
+                include_binary=args.include_binary,
+                ignore_dirs=ignore_dirs,
+                include_files=include_files,
+                glob_patterns=include_patterns,  # Same as include_patterns for compatibility
+                max_depth=args.max_depth
+            )
+    except Exception as e:
+        logging.error(f"Error during file discovery: {e}")
+        sys.exit(1)
+    
+    # Exclude output file from processing
+    path_list = exclude_output_file(path_list, output_str)
+    
+    # Count results
     file_count = len([item for item in path_list if item['type'] == 'file'])
-    logging.info(f"Final file count: {file_count} files")
-
+    dir_count = len([item for item in path_list if item['type'] == 'dir'])
+    
     if file_count == 0:
         logging.warning("No files found matching criteria")
-        write_file(args.output, "## No files found matching criteria\n")
+        if not write_file(output_str, "## No files found matching criteria\n"):
+            sys.exit(1)
+        print("No files found matching the specified criteria.")
         return
-
-    print(f"Processing {file_count} files -> {args.output}")
-
-    # Generate directory tree if not disabled
-    if not args.no_tree:
-        generate_tree(path_list, args.output)
+    
+    print(f"Processing {file_count} files from {dir_count} directories -> {output_str}")
+    
+    try:
+        # Generate directory tree if not disabled
+        if not args.no_tree:
+            logging.info("Generating directory tree...")
+            if not generate_tree(path_list, output_str):
+                logging.error("Failed to generate directory tree")
+                sys.exit(1)
         
-    # Generate Python outline if requested
-    if args.outline:
-        python_outline_files(path_list, args.output)
-
-    # Concatenate source files if not disabled
-    if not args.no_dump:
-        concat_files(path_list, args.output)
-
-    # Show token count
-    token_info = count_file_tokens(args.output)
-    print(token_info)
-
-    # Archive the output file if requested
-    if args.archive:
-        archive_path = archive_file(args.output, args.archive)
-        print(f"Archive created: {archive_path}")
-
-    print("Flort completed successfully")
+        # Generate Python outline if requested
+        if args.outline:
+            logging.info("Generating Python outline...")
+            if not python_outline_files(path_list, output_str):
+                logging.error("Failed to generate Python outline")
+                sys.exit(1)
+        
+        # Generate file manifest or concatenate files
+        if args.manifest:
+            logging.info("Generating file manifest...")
+            if not create_file_manifest(path_list, output_str):
+                logging.error("Failed to create file manifest")
+                sys.exit(1)
+        elif not args.no_dump:
+            logging.info("Concatenating files...")
+            if not concat_files(path_list, output_str, args.clean_content):
+                logging.error("Failed to concatenate files")
+                sys.exit(1)
+        
+        # Show token count and statistics
+        if output_str != "stdio":
+            token_info = count_file_tokens(output_str)
+            print(f"\nOutput Statistics:\n{token_info}")
+        
+        # Archive the output file if requested
+        if args.archive and output_str != "stdio":
+            logging.info(f"Creating {args.archive} archive...")
+            archive_path = archive_file(output_str, args.archive)
+            if archive_path:
+                print(f"Archive created: {archive_path}")
+            else:
+                logging.warning("Failed to create archive")
+        
+        print("Flort completed successfully!")
+        
+    except KeyboardInterrupt:
+        logging.info("Operation cancelled by user")
+        sys.exit(1)
+    except Exception as e:
+        logging.error(f"Unexpected error during processing: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
